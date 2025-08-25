@@ -73,12 +73,12 @@ def should_skip(url: str) -> bool:
 
 # Block Careers/About and localized variants (and subpaths)
 BLOCKED_BASES = [
-    "/career", "/careers", "/about",
+    "/career", "/careers", "/about", "/cookies", "/subscribe", "/privacy", "/work", "/studios",
     "/karriere", "/jobs", "/ueber-uns", "/unternehmen", "/team"
 ]
 
 RAW_CSV = "scraped_data_raw.csv"
-DIGEST_CSV = "scraped_data_digest.csv"
+DIGEST_CSV = "scraped_summarised_data.csv"
 
 # ------------------------- Session State ----------------------
 
