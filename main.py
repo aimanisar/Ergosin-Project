@@ -51,119 +51,22 @@ SITES = [
     {"type": "competitor", "url": "https://www.consulteer.com/"},
     {"type": "competitor", "url": "https://www.404.agency/hr/"},
     {"type": "competitor", "url": "https://www.custom-interactions.com/"},
-    {"type": "competitor", "url": "https://www.wikipedia.org/"}    
+    {"type": "competitor", "url": "https://www.wikipedia.org/"}
 ]
-
-# SKIP_PATH = "unique_urls.csv"
-# try:
-#     skip_df = pd.read_csv(SKIP_PATH)
-#     SKIP_URLS = set(u.strip().rstrip("/") for u in skip_df["url"].dropna())
-# except Exception:
-#     SKIP_URLS = set()
-
-# def should_skip(url: str) -> bool:
-#     return url.strip().rstrip("/") in SKIP_URLS
-
-# BLOCKED_BASES = [
-#     "/career", "/careers", "/about", "/cookies", "/subscribe", "/privacy", "/work", "/studios", "/report-an-incident",
-#     "/karriere", "/jobs", "/ueber-uns", "/unternehmen", "/team", "/contact"
-# ]
 
 CSV_PATH = "scraped_data.csv"
 
 if "cancel_scrape" not in st.session_state:
     st.session_state["cancel_scrape"] = False
 
+
 # --------------------------- Helpers --------------------------
-# def is_blocked(url: str) -> bool:
-#     p = urlparse(url).path.lower().rstrip("/")
-#     for base in BLOCKED_BASES:
-#         b = base.rstrip("/").lower()
-#         if p == b or p.startswith(b + "/"):
-#             return True
-#     return False
-
-# def _merge_to_csv(path: str, new_df: pd.DataFrame, subset_cols: list[str]):
-#     if new_df is None or new_df.empty:
-#         return
-#     if os.path.exists(path):
-#         old = pd.read_csv(path)
-#         cat = pd.concat([old, new_df], ignore_index=True)
-#         cat = cat.drop_duplicates(subset=subset_cols, keep="last")
-#     else:
-#         cat = new_df
-#     cat.to_csv(path, index=False, encoding="utf-8")
-
 def make_hash(text: str) -> str:
     """Generate MD5 hash of text for change detection."""
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
+
 # ------------------------- Scrape Logic -----------------------
-# def scrape_site(site_url: str):
-#     """Scrape only this site (main page + LLM-filtered internal links)."""
-#     domain = urlparse(site_url).netloc
-#     rows = []
-
-#     status = st.empty()
-#     url_log = st.container()
-#     prog = st.progress(0, text=f"Starting: {site_url}")
-
-#     def _log(msg: str):
-#         status.write(msg)
-#         with url_log:
-#             st.write(msg)
-
-#     if should_skip(site_url):
-#         st.info(f"⏭️ Skipped (in skip list): {site_url}")
-#         return pd.DataFrame(columns=["website","page_url","page_name","content","topics"])
-
-#     _log(f"🔎 Scraping main page: {site_url}")
-#     main_html  = scrape_website(site_url)
-#     main_clean = extract_main_content(main_html)
-#     rows.append({
-#         "website": domain, "page_url": site_url, "page_name": "home",
-#         "content": main_clean, "topics": ""
-#     })
-
-#     # --- Extract + LLM filter subpages ---
-#     subpages = extract_internal_links(main_html, site_url)
-
-#     seen = set()
-#     subpages = [u for u in subpages if not (u in seen or seen.add(u))]
-
-#     subpages = filter_links_with_llm(subpages, site_url)  # 🔹 NEW: LLM filtering
-
-#     total = max(1, len(subpages) + 1)
-#     done = 1
-#     prog.progress(done/total, text=f"{domain}: {done}/{total}")
-
-#     for sub_url in subpages:
-#         if should_skip(sub_url):
-#             _log(f"⏭️ Skipped (in skip list): {sub_url}")
-#             done += 1
-#             prog.progress(min(done/total, 1.0), text=f"{domain}: {done}/{total}")
-#             continue
-
-#         try:
-#             _log(f"🔎 Scraping subpage: {sub_url}")
-#             sub_html  = scrape_website(sub_url)
-#             sub_clean = extract_main_content(sub_html)
-#             sub_name  = urlparse(sub_url).path.strip("/") or "home"
-#             rows.append({
-#                 "website": domain, "page_url": sub_url, "page_name": sub_name,
-#                 "content": sub_clean, "topics": ""
-#             })
-#         except Exception as e:
-#             _log(f"⚠️ Error scraping {sub_url}: {e}")
-
-#         done += 1
-#         prog.progress(min(done/total, 1.0), text=f"{domain}: {done}/{total}")
-
-#     prog.empty(); status.empty()
-#     return pd.DataFrame(rows, columns=["website","page_url","page_name","content","topics"])
-
-from datetime import datetime
-
 def scrape_site(site_url: str):
     """Scrape only this site (main page + LLM-filtered internal links)."""
     domain = urlparse(site_url).netloc
@@ -182,8 +85,9 @@ def scrape_site(site_url: str):
 
     # --- Main page ---
     _log(f"🔎 Scraping main page: {site_url}")
-    main_html  = scrape_website(site_url)
+    main_html = scrape_website(site_url)
     main_clean = extract_main_content(main_html)
+    main_clean = main_clean.replace("\n", " ").replace("\r", " ").strip()
     rows.append({
         "website": domain, "page_url": site_url, "page_name": "home",
         "content": main_clean, "content_hash": make_hash(main_clean),
@@ -198,14 +102,15 @@ def scrape_site(site_url: str):
 
     total = max(1, len(subpages) + 1)
     done = 1
-    prog.progress(done/total, text=f"{domain}: {done}/{total}")
+    prog.progress(done / total, text=f"{domain}: {done}/{total}")
 
     for sub_url in subpages:
         try:
             _log(f"🔎 Scraping subpage: {sub_url}")
-            sub_html  = scrape_website(sub_url)
+            sub_html = scrape_website(sub_url)
             sub_clean = extract_main_content(sub_html)
-            sub_name  = urlparse(sub_url).path.strip("/") or "home"
+            sub_clean = sub_clean.replace("\n", " ").replace("\r", " ").strip()
+            sub_name = urlparse(sub_url).path.strip("/") or "home"
             rows.append({
                 "website": domain, "page_url": sub_url, "page_name": sub_name,
                 "content": sub_clean, "content_hash": make_hash(sub_clean),
@@ -215,10 +120,13 @@ def scrape_site(site_url: str):
             _log(f"⚠️ Error scraping {sub_url}: {e}")
 
         done += 1
-        prog.progress(min(done/total, 1.0), text=f"{domain}: {done}/{total}")
+        prog.progress(min(done / total, 1.0), text=f"{domain}: {done}/{total}")
 
-    prog.empty(); status.empty()
-    return pd.DataFrame(rows, columns=["website","page_url","page_name","content","content_hash","topics","last_scraped"])
+    prog.empty()
+    status.empty()
+    return pd.DataFrame(rows, columns=[
+        "website", "page_url", "page_name", "content", "content_hash", "topics", "last_scraped"
+    ])
 
 
 def scrape_all_sites(max_workers: int = 2):
@@ -227,15 +135,15 @@ def scrape_all_sites(max_workers: int = 2):
     total_rows = 0
     processed_sites = 0
 
-    # Load existing cache if file exists
     if os.path.exists(CSV_PATH):
         cached_df = pd.read_csv(CSV_PATH)
     else:
-        cached_df = pd.DataFrame(columns=["website","page_url","page_name","content","topics","content_hash"])
+        cached_df = pd.DataFrame(columns=[
+            "website", "page_url", "page_name", "content", "topics", "content_hash", "last_scraped"
+        ])
 
     overall = st.progress(0, text="Starting full run…")
 
-    # Parallel execution
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(scrape_site, site["url"].strip()): site for site in SITES}
 
@@ -253,13 +161,10 @@ def scrape_all_sites(max_workers: int = 2):
                 st.error(f"⚠️ Error scraping {site_url}: {e}")
                 continue
 
-            # Merge new scrape with cache
             merged_df = pd.concat([cached_df, raw_df], ignore_index=True)
-
-            # Always keep the last version of each page
             merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
 
-            # 🔹 Detect pages needing updates (new, empty topics, or content changed)
+            # Detect new/changed pages
             to_update = merged_df[
                 (merged_df["topics"].isna()) |
                 (merged_df["topics"] == "") |
@@ -278,15 +183,14 @@ def scrape_all_sites(max_workers: int = 2):
                 st.info(f"🔎 {site_url}: {skipped_count} unchanged, processing {new_count} new/updated pages with LLM...")
                 topics_result = call_llm_batch(pages_to_process)
                 topics_map = {r["url"]: r.get("topics", []) for r in topics_result}
-
                 merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "topics"] = \
                     merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, [])))
             else:
                 st.success(f"✅ {site_url}: all {skipped_count} pages unchanged, no LLM calls needed.")
 
-            # Save updated cache
             cached_df = merged_df
             cached_df.to_csv(CSV_PATH, index=False, encoding="utf-8")
+            st.write(f"💾 Saved {len(cached_df)} rows to {CSV_PATH}")
 
             total_rows += len(raw_df)
             processed_sites += 1
@@ -297,12 +201,11 @@ def scrape_all_sites(max_workers: int = 2):
     st.success(f"✅ Full run complete. Added/updated {total_rows} rows across {processed_sites} sites.")
 
 
-
 # ---------------------------- UI ------------------------------
 st.title("Automated Website Scraper (Raw + Topics)")
 
 with st.container():
-    c1, c2 = st.columns([6,6], gap="small")
+    c1, c2 = st.columns([6, 6], gap="small")
     with c1:
         if st.button("❌ Terminate", use_container_width=True):
             st.session_state["cancel_scrape"] = True
@@ -317,7 +220,7 @@ st.caption("Terminate stops after the current page. Scrape ALL runs sites in ord
 with st.expander("CSV status & downloads", expanded=False):
     if os.path.exists(CSV_PATH):
         _df = pd.read_csv(CSV_PATH)
-        st.write(f"**Data** — {_df.shape[0]} rows")
+        st.write(f"**Data** — {_df.shape[0]} rows, columns: {_df.columns.tolist()}")
         st.download_button("⬇️ Download CSV", _df.to_csv(index=False).encode("utf-8"),
                            file_name=CSV_PATH, mime="text/csv", key="dl_data")
     else:
@@ -333,35 +236,33 @@ for i, site in enumerate(SITES):
 
     with st.container():
         st.markdown('<div class="site-card">', unsafe_allow_html=True)
-        r1c1, r1c2, r1c3, r1c4 = st.columns([6,2,2,2], gap="medium")
+        r1c1, r1c2, r1c3, r1c4 = st.columns([6, 2, 2, 2], gap="medium")
 
-        # Left: URL + type badge
         with r1c1:
             st.markdown(f"**[{site_url}]({site_url})**")
             st.markdown(f'<span class="badge {site_type}">{site_type}</span>', unsafe_allow_html=True)
 
-        # Scrape button
         with r1c2:
             if st.button("Scrape", key=f"scrape_{i}"):
                 with st.spinner(f"Scraping {site_url}…"):
                     raw_df = scrape_site(site_url)
 
-                    # Load existing cache
                     if os.path.exists(CSV_PATH):
                         cached_df = pd.read_csv(CSV_PATH)
                     else:
-                        cached_df = pd.DataFrame(columns=["website","page_url","page_name","content","content_hash","topics","last_scraped"])
+                        cached_df = pd.DataFrame(columns=[
+                            "website", "page_url", "page_name", "content", "content_hash", "topics", "last_scraped"
+                        ])
 
-                    # Merge and deduplicate
                     merged_df = pd.concat([cached_df, raw_df], ignore_index=True)
                     merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
 
-                    # Detect new/changed pages
                     to_update = merged_df[
                         (merged_df["topics"].isna()) |
                         (merged_df["topics"] == "") |
                         (merged_df["content_hash"] != merged_df.groupby("page_url")["content_hash"].transform("last"))
                     ]
+
                     pages_to_process = [
                         {"url": row["page_url"], "content": row["content"]}
                         for _, row in to_update.iterrows()
@@ -376,18 +277,16 @@ for i, site in enumerate(SITES):
                     else:
                         st.success("✅ No new/updated pages, nothing sent to LLM.")
 
-                    # Save back
                     merged_df.to_csv(CSV_PATH, index=False, encoding="utf-8")
+                    st.write(f"💾 Saved {len(merged_df)} rows to {CSV_PATH}")
 
                 st.success(f"✅ Done scraping {site_url} ({len(raw_df)} pages scraped)")
 
-        # Terminate button
         with r1c3:
             if st.button("Terminate", key=f"term_{i}"):
                 st.session_state["cancel_scrape"] = True
                 st.warning("Termination requested for this site. Will stop after current page.")
 
-        # Open link
         with r1c4:
             st.markdown(f'<a href="{site_url}" target="_blank">Open</a>', unsafe_allow_html=True)
 
