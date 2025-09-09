@@ -51,6 +51,7 @@ SITES = [
     {"type": "competitor", "url": "https://www.consulteer.com/"},
     {"type": "competitor", "url": "https://www.404.agency/hr/"},
     {"type": "competitor", "url": "https://www.custom-interactions.com/"},
+    {"type": "competitor", "url": "https://www.wikipedia.org/"}    
 ]
 
 # SKIP_PATH = "unique_urls.csv"
@@ -265,7 +266,10 @@ def scrape_all_sites(max_workers: int = 2):
                 (merged_df["content_hash"] != merged_df.groupby("page_url")["content_hash"].transform("last"))
             ]
 
-            pages_to_process = list(zip(to_update["page_url"], to_update["content"]))
+            pages_to_process = [
+                {"url": row["page_url"], "content": row["content"]}
+                for _, row in to_update.iterrows()
+            ]
 
             skipped_count = len(merged_df) - len(to_update)
             new_count = len(pages_to_process)
@@ -318,3 +322,73 @@ with st.expander("CSV status & downloads", expanded=False):
                            file_name=CSV_PATH, mime="text/csv", key="dl_data")
     else:
         st.info("No CSV yet.")
+
+
+# ------------------------ Per-Site Scrape Controls ------------------------
+st.subheader("Scrape Individual Websites")
+
+for i, site in enumerate(SITES):
+    site_url = site["url"].strip()
+    site_type = site["type"]
+
+    with st.container():
+        st.markdown('<div class="site-card">', unsafe_allow_html=True)
+        r1c1, r1c2, r1c3, r1c4 = st.columns([6,2,2,2], gap="medium")
+
+        # Left: URL + type badge
+        with r1c1:
+            st.markdown(f"**[{site_url}]({site_url})**")
+            st.markdown(f'<span class="badge {site_type}">{site_type}</span>', unsafe_allow_html=True)
+
+        # Scrape button
+        with r1c2:
+            if st.button("Scrape", key=f"scrape_{i}"):
+                with st.spinner(f"Scraping {site_url}…"):
+                    raw_df = scrape_site(site_url)
+
+                    # Load existing cache
+                    if os.path.exists(CSV_PATH):
+                        cached_df = pd.read_csv(CSV_PATH)
+                    else:
+                        cached_df = pd.DataFrame(columns=["website","page_url","page_name","content","content_hash","topics","last_scraped"])
+
+                    # Merge and deduplicate
+                    merged_df = pd.concat([cached_df, raw_df], ignore_index=True)
+                    merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
+
+                    # Detect new/changed pages
+                    to_update = merged_df[
+                        (merged_df["topics"].isna()) |
+                        (merged_df["topics"] == "") |
+                        (merged_df["content_hash"] != merged_df.groupby("page_url")["content_hash"].transform("last"))
+                    ]
+                    pages_to_process = [
+                        {"url": row["page_url"], "content": row["content"]}
+                        for _, row in to_update.iterrows()
+                    ]
+
+                    if len(pages_to_process) > 0:
+                        st.info(f"🔎 {len(pages_to_process)} new/updated pages need topics...")
+                        topics_result = call_llm_batch(pages_to_process)
+                        topics_map = {r["url"]: r.get("topics", []) for r in topics_result}
+                        merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "topics"] = \
+                            merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, [])))
+                    else:
+                        st.success("✅ No new/updated pages, nothing sent to LLM.")
+
+                    # Save back
+                    merged_df.to_csv(CSV_PATH, index=False, encoding="utf-8")
+
+                st.success(f"✅ Done scraping {site_url} ({len(raw_df)} pages scraped)")
+
+        # Terminate button
+        with r1c3:
+            if st.button("Terminate", key=f"term_{i}"):
+                st.session_state["cancel_scrape"] = True
+                st.warning("Termination requested for this site. Will stop after current page.")
+
+        # Open link
+        with r1c4:
+            st.markdown(f'<a href="{site_url}" target="_blank">Open</a>', unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)

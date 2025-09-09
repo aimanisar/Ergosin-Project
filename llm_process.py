@@ -27,13 +27,14 @@ Extract topics from the following webpage texts.
 
 Return JSON in this form:
 [
-  {"url": "...", "topics": ["...", "..."]},
-  {"url": "...", "topics": ["...", "..."]}
+  {{"url": "...", "topics": ["...", "..."]}},
+  {{"url": "...", "topics": ["...", "..."]}}
 ]
 
 TEXTS (truncated):
 {pages_text}
 """
+
 
 def _safe_parse_json(s: str):
     try:
@@ -48,25 +49,30 @@ def _safe_parse_json(s: str):
             pass
     return []
 
-def call_llm_batch(pages: list[tuple[str, str]]) -> list[dict]:
+def call_llm_batch(pages: list[dict]) -> list[dict]:
     """
-    Batch call to LLM: input [(url, text)], return [{"url":..., "topics":[...]}].
+    Batch call to LLM: input [{"url":..., "content":...}], 
+    return [{"url":..., "topics":[...]}].
     """
     if not pages:
         return []
 
     # truncate each page text to MAX_CHARS
     text_blocks = []
-    for url, text in pages:
-        t = (text or "").strip()
-        if len(t) > MAX_CHARS:
-            t = t[:MAX_CHARS]
-        text_blocks.append(f"URL: {url}\nTEXT:\n{t}\n---")
+    for page in pages:
+        url = page["url"]
+        text = (page["content"] or "").strip()
+        if len(text) > MAX_CHARS:
+            text = text[:MAX_CHARS]
+        text_blocks.append(f"URL: {url}\nTEXT:\n{text}\n---")
+
+    # IMPORTANT: double-curly braces in USER_PROMPT_TEMPLATE
+    prompt = f"<SYSTEM>\n{SYSTEM_PROMPT}\n</SYSTEM>\n\n" \
+             f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text='\n'.join(text_blocks))}\n</USER>"
 
     payload = {
         "model": OLLAMA_MODEL,
-        "prompt": f"<SYSTEM>\n{SYSTEM_PROMPT}\n</SYSTEM>\n\n"
-                  f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text='\n'.join(text_blocks))}\n</USER>",
+        "prompt": prompt,
         "options": {"temperature": TEMPERATURE},
         "stream": False
     }
@@ -82,7 +88,9 @@ def call_llm_batch(pages: list[tuple[str, str]]) -> list[dict]:
         return parsed
     except Exception as e:
         print("LLM error -> no topics:", e)
-        return [{"url": url, "topics": []} for url, _ in pages]
+        return [{"url": page["url"], "topics": []} for page in pages]
+
+
 
 def filter_links_with_llm(urls: list[str], base_url: str) -> list[str]:
     """
