@@ -12,23 +12,25 @@ def _get_secret(name, default=None):
 OLLAMA_BASE = _get_secret("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = _get_secret("OLLAMA_MODEL", "llama3.2")
 
-MAX_CHARS = 8000
+MAX_CHARS = 3000
 TEMPERATURE = 0.2
-TIMEOUT = 120  # seconds
+TIMEOUT = 300  # seconds
 
-# 🔹 New: Prompt only asks for topics
 SYSTEM_PROMPT = (
-    "You are a keyword extractor. Given raw webpage text, return ONLY key topics.\n"
-    "Always return STRICT JSON array of short phrases (3–6 keywords).\n"
+    "You are a summarizer and keyword extractor. "
+    "Given raw webpage text, return BOTH:\n"
+    "1. A concise summary (2–3 sentences).\n"
+    "2. Key topics (3–6 keywords).\n"
+    "Always return STRICT JSON with 'url', 'summary', and 'topics'."
 )
 
 USER_PROMPT_TEMPLATE = """\
-Extract topics from the following webpage texts.
+Extract a short summary and key topics from the following webpage texts.
 
 Return JSON in this form:
 [
-  {{"url": "...", "topics": ["...", "..."]}},
-  {{"url": "...", "topics": ["...", "..."]}}
+  {{"url": "...", "summary": "short summary...", "topics": ["...", "..."]}},
+  {{"url": "...", "summary": "short summary...", "topics": ["...", "..."]}}
 ]
 
 TEXTS (truncated):
@@ -36,60 +38,92 @@ TEXTS (truncated):
 """
 
 
+
 def _safe_parse_json(s: str):
     try:
-        return json.loads(s)
+        data = json.loads(s)
+        return data if isinstance(data, list) else []
     except Exception:
-        pass
-    m = re.search(r"\[.*\]", s, re.DOTALL)  # crude JSON array grab
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except Exception:
-            pass
+        m = re.search(r"\[.*\]", s, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except:
+                pass
     return []
 
-def call_llm_batch(pages: list[dict]) -> list[dict]:
+
+def call_llm_batch(pages: list[dict], batch_size: int = 5) -> list[dict]:
     """
-    Batch call to LLM: input [{"url":..., "content":...}], 
-    return [{"url":..., "topics":[...]}].
+    Batch call to LLM safely:
+    - Input: [{"url":..., "content":...}]
+    - Output: [{"url":..., "summary":..., "topics":[...]}]
     """
     if not pages:
         return []
 
-    # truncate each page text to MAX_CHARS
-    text_blocks = []
-    for page in pages:
-        url = page["url"]
-        text = (page["content"] or "").strip()
-        if len(text) > MAX_CHARS:
-            text = text[:MAX_CHARS]
-        text_blocks.append(f"URL: {url}\nTEXT:\n{text}\n---")
+    results = []
 
-    # IMPORTANT: double-curly braces in USER_PROMPT_TEMPLATE
-    prompt = f"<SYSTEM>\n{SYSTEM_PROMPT}\n</SYSTEM>\n\n" \
-             f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text='\n'.join(text_blocks))}\n</USER>"
+    # process in smaller groups
+    for i in range(0, len(pages), batch_size):
+        batch = pages[i:i + batch_size]
 
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "options": {"temperature": TEMPERATURE},
-        "stream": False
-    }
+        text_blocks = []
+        for page in batch:
+            url = page["url"]
+            text = (page["content"] or "").strip()
+            if len(text) > MAX_CHARS:
+                text = text[:MAX_CHARS]
+            # clean up text aggressively
+            text = text.replace("\n", " ").replace("\r", " ")
+            text_blocks.append(f"URL: {url}\nTEXT:\n{text}\n---")
 
-    try:
-        resp = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("response", "") or ""
-        parsed = _safe_parse_json(content)
-        print(f"⚡ Using Ollama model: {OLLAMA_MODEL}")
-        time.sleep(0.2)
-        return parsed
-    except Exception as e:
-        print("LLM error -> no topics:", e)
-        return [{"url": page["url"], "topics": []} for page in pages]
+        prompt = (
+            f"<SYSTEM>\n{SYSTEM_PROMPT}\n</SYSTEM>\n\n"
+            f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text='\n'.join(text_blocks))}\n</USER>"
+        )
 
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "options": {"temperature": TEMPERATURE},
+            "stream": False
+        }
+
+        # retry logic
+        for attempt in range(3):
+            try:
+                resp = requests.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=TIMEOUT)
+                resp.raise_for_status()
+                data = resp.json()
+                content = data.get("response", "") or ""
+                print("RAW LLM OUTPUT:", content[:500])
+                parsed = _safe_parse_json(content)
+
+                # make sure we always get url + summary + topics
+                for page in batch:
+                    url = page["url"]
+                    match = next((r for r in parsed if r.get("url") == url), None)
+                    if match:
+                        results.append({
+                            "url": url,
+                            "summary": match.get("summary", ""),
+                            "topics": match.get("topics", [])
+                        })
+                    else:
+                        results.append({"url": url, "summary": "", "topics": []})
+
+                print(f"⚡ Batch {i//batch_size+1}: processed {len(batch)} pages")
+                time.sleep(0.2)
+                break  # success → stop retry loop
+
+            except Exception as e:
+                print(f"LLM error (attempt {attempt+1}) on batch {i//batch_size+1}:", e)
+                if attempt == 2:  # last try failed
+                    for page in batch:
+                        results.append({"url": page["url"], "summary": "", "topics": []})
+
+    return results
 
 
 def filter_links_with_llm(urls: list[str], base_url: str) -> list[str]:
@@ -106,7 +140,7 @@ Return ONLY the URLs that are likely to contain meaningful page content
 Exclude utility/boilerplate pages (like careers, jobs, about, team, privacy, cookies, terms, contact).
 Return STRICT JSON as:
 {{"keep": ["url1", "url2", ...]}}
-    
+
 Here are the URLs:
 {json.dumps(urls, indent=2)}
 """

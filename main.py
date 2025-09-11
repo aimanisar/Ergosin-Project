@@ -60,6 +60,23 @@ if "cancel_scrape" not in st.session_state:
     st.session_state["cancel_scrape"] = False
 
 
+# --- Hard-coded blocked paths ---
+BLOCKED_BASES = [
+    "/career", "/careers", "/about", "/cookies", "/subscribe",
+    "/privacy", "/terms", "/legal", "/impressum",
+    "/karriere", "/jobs", "/ueber-uns", "/unternehmen",
+    "/team", "/contact", "/studios"
+]
+
+def is_blocked(url: str) -> bool:
+    """Return True if URL matches a blocked base path."""
+    p = urlparse(url).path.lower().rstrip("/")
+    for base in BLOCKED_BASES:
+        b = base.rstrip("/").lower()
+        if p == b or p.startswith(b + "/"):
+            return True
+    return False
+
 # --------------------------- Helpers --------------------------
 def make_hash(text: str) -> str:
     """Generate MD5 hash of text for change detection."""
@@ -98,7 +115,12 @@ def scrape_site(site_url: str):
     subpages = extract_internal_links(main_html, site_url)
     seen = set()
     subpages = [u for u in subpages if not (u in seen or seen.add(u))]
-    subpages = filter_links_with_llm(subpages, site_url)  # 🔹 LLM decides
+    # 1. Apply hard-coded filter
+    subpages = [u for u in subpages if not is_blocked(u)]
+
+    # 2. Apply LLM filter (final refinement)
+    subpages = filter_links_with_llm(subpages, site_url)
+
 
     total = max(1, len(subpages) + 1)
     done = 1
@@ -113,7 +135,7 @@ def scrape_site(site_url: str):
             sub_name = urlparse(sub_url).path.strip("/") or "home"
             rows.append({
                 "website": domain, "page_url": sub_url, "page_name": sub_name,
-                "content": sub_clean, "content_hash": make_hash(sub_clean),
+                "content": sub_clean, "content_hash": make_hash(sub_clean), "summary": "",
                 "topics": "", "last_scraped": now
             })
         except Exception as e:
@@ -125,8 +147,10 @@ def scrape_site(site_url: str):
     prog.empty()
     status.empty()
     return pd.DataFrame(rows, columns=[
-        "website", "page_url", "page_name", "content", "content_hash", "topics", "last_scraped"
+    "website", "page_url", "page_name", "content", "content_hash", "summary", "topics", "last_scraped"
     ])
+
+
 
 
 def scrape_all_sites(max_workers: int = 2):
@@ -139,8 +163,9 @@ def scrape_all_sites(max_workers: int = 2):
         cached_df = pd.read_csv(CSV_PATH)
     else:
         cached_df = pd.DataFrame(columns=[
-            "website", "page_url", "page_name", "content", "topics", "content_hash", "last_scraped"
+            "website","page_url","page_name","content","content_hash","summary","topics","last_scraped"
         ])
+
 
     overall = st.progress(0, text="Starting full run…")
 
@@ -162,7 +187,7 @@ def scrape_all_sites(max_workers: int = 2):
                 continue
 
             merged_df = pd.concat([cached_df, raw_df], ignore_index=True)
-            merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
+            # merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
 
             # Detect new/changed pages
             to_update = merged_df[
@@ -182,9 +207,16 @@ def scrape_all_sites(max_workers: int = 2):
             if new_count > 0:
                 st.info(f"🔎 {site_url}: {skipped_count} unchanged, processing {new_count} new/updated pages with LLM...")
                 topics_result = call_llm_batch(pages_to_process)
-                topics_map = {r["url"]: r.get("topics", []) for r in topics_result}
+                topics_map = {r["url"]: r for r in topics_result}
+
+                # Update topics
                 merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "topics"] = \
-                    merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, [])))
+                    merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, {}).get("topics", [])))
+
+                # Update summary
+                merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "summary"] = \
+                    merged_df["page_url"].map(lambda u: topics_map.get(u, {}).get("summary", ""))
+
             else:
                 st.success(f"✅ {site_url}: all {skipped_count} pages unchanged, no LLM calls needed.")
 
@@ -251,11 +283,11 @@ for i, site in enumerate(SITES):
                         cached_df = pd.read_csv(CSV_PATH)
                     else:
                         cached_df = pd.DataFrame(columns=[
-                            "website", "page_url", "page_name", "content", "content_hash", "topics", "last_scraped"
+                            "website","page_url","page_name","content","content_hash","summary","topics","last_scraped"
                         ])
 
                     merged_df = pd.concat([cached_df, raw_df], ignore_index=True)
-                    merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
+                    # merged_df = merged_df.drop_duplicates(subset=["page_url"], keep="last")
 
                     to_update = merged_df[
                         (merged_df["topics"].isna()) |
@@ -271,9 +303,16 @@ for i, site in enumerate(SITES):
                     if len(pages_to_process) > 0:
                         st.info(f"🔎 {len(pages_to_process)} new/updated pages need topics...")
                         topics_result = call_llm_batch(pages_to_process)
-                        topics_map = {r["url"]: r.get("topics", []) for r in topics_result}
+                        topics_map = {r["url"]: r for r in topics_result}
+
+                        # Update topics
                         merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "topics"] = \
-                            merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, [])))
+                            merged_df["page_url"].map(lambda u: ", ".join(topics_map.get(u, {}).get("topics", [])))
+
+                        # Update summary
+                        merged_df.loc[merged_df["page_url"].isin(topics_map.keys()), "summary"] = \
+                            merged_df["page_url"].map(lambda u: topics_map.get(u, {}).get("summary", ""))
+
                     else:
                         st.success("✅ No new/updated pages, nothing sent to LLM.")
 
