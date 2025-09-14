@@ -10,7 +10,7 @@ import os
 import pandas as pd
 import hashlib
 from config import CSV_PATH
-
+import json
 
 def make_hash(text: str) -> str:
     """Generate MD5 hash of text for change detection."""
@@ -20,7 +20,11 @@ def make_hash(text: str) -> str:
 def load_cache() -> pd.DataFrame:
     """Load existing CSV into a DataFrame, or return empty DataFrame if none exists."""
     if os.path.exists(CSV_PATH):
-        return pd.read_csv(CSV_PATH)
+        df = pd.read_csv(CSV_PATH)
+        # Convert topics from JSON string back to list
+        if "topics" in df.columns:
+            df["topics"] = df["topics"].apply(lambda x: json.loads(x) if isinstance(x, str) and x.startswith("[") else [])
+        return df
     return pd.DataFrame(columns=[
         "website", "page_url", "page_name",
         "content", "content_hash", "summary", "topics", "last_scraped"

@@ -154,6 +154,12 @@ def call_llm_batch(pages: list[dict], batch_size: int = 3) -> list[dict]:
             content = data.get("response", "") or ""
             parsed = _safe_parse_json(content)
 
+            # ✅ Ensure parsed is always a list of dicts
+            if not isinstance(parsed, list):
+                parsed = []
+            else:
+                parsed = [p for p in parsed if isinstance(p, dict)]
+
             # Match results back to URLs in this batch
             for page in batch:
                 url = page["url"]
@@ -175,6 +181,7 @@ def call_llm_batch(pages: list[dict], batch_size: int = 3) -> list[dict]:
         time.sleep(0.3)  # small pause between batches
 
     return all_results
+
 
 
 

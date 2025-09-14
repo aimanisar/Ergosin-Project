@@ -21,6 +21,18 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from llm_process import filter_links_with_llm
 from storage import load_cache, make_hash  
+from config import BLOCKED_BASES
+
+
+def is_blocked(url: str) -> bool:
+    """Return True if URL matches a blocked base path."""
+    path = urlparse(url).path.lower().rstrip("/")
+    for base in BLOCKED_BASES:
+        b = base.rstrip("/").lower()
+        if path == b or path.startswith(b + "/"):
+            return True
+    return False
+
 
 # ------------------ Core Page Scraping ------------------
 
@@ -132,7 +144,13 @@ def scrape_site(site_url: str) -> pd.DataFrame:
     # Deduplicate + LLM filter
     seen = set()
     subpages = [u for u in subpages if not (u in seen or seen.add(u))]
+
+    # Step 1: Hard filter using BLOCKED_BASES
+    subpages = [u for u in subpages if not is_blocked(u)]
+
+    # Step 2: Refine with LLM filter
     subpages = filter_links_with_llm(subpages, site_url)
+
 
     total = max(1, len(subpages) + 1)
     done = 1
