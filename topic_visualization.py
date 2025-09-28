@@ -1,0 +1,1278 @@
+#!/usr/bin/env python3
+"""
+Topic Visualization Module for Competitive Intelligence Dashboard.
+
+This module provides comprehensive data visualization capabilities:
+- Interactive topic comparison charts
+- Competitive analysis visualizations
+- Market trend analysis
+- Strategic insights dashboards
+"""
+
+import re
+from collections import Counter
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import streamlit as st
+
+from storage import load_cache
+
+class TopicVisualizer:
+    def __init__(self):
+        self.df = None
+        self.base_data = None
+        self.competitor_data = None
+    
+    def load_data(self):
+        """Load data from Google Sheets"""
+        try:
+            self.df = load_cache()
+            if self.df.empty:
+                st.error("No data found. Please scrape some websites first.")
+                return False
+            
+            # Separate base and competitor data
+            self.base_data = self.df[self.df['website'].str.contains('ergosign', case=False, na=False)]
+            self.competitor_data = self.df[~self.df['website'].str.contains('ergosign', case=False, na=False)]
+            
+            return True
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            return False
+    
+    def extract_topics(self, data):
+        """Extract and count topics from data"""
+        all_topics = []
+        for topics_str in data['topics'].dropna():
+            if topics_str and topics_str != '[]':
+                # Split by comma and clean up
+                topics = [topic.strip() for topic in str(topics_str).split(',')]
+                all_topics.extend(topics)
+        
+        # Count topic frequency
+        topic_counts = Counter(all_topics)
+        return topic_counts
+    
+    def create_simple_topic_comparison(self):
+        """Create a simple, realistic topic comparison"""
+        if self.base_data.empty or self.competitor_data.empty:
+            st.warning("Need both base and competitor data for comparison")
+            return
+        
+        # Extract topics
+        base_topics = self.extract_topics(self.base_data)
+        competitor_topics = self.extract_topics(self.competitor_data)
+        
+        # Get top 15 topics for each
+        top_base = dict(base_topics.most_common(15))
+        top_competitor = dict(competitor_topics.most_common(15))
+        
+        # Create comparison data
+        all_topics = set(list(top_base.keys()) + list(top_competitor.keys()))
+        
+        comparison_data = []
+        for topic in all_topics:
+            base_count = top_base.get(topic, 0)
+            comp_count = top_competitor.get(topic, 0)
+            total_count = base_count + comp_count
+            
+            comparison_data.append({
+                'Topic': topic,
+                'Base Website': base_count,
+                'Competitors': comp_count,
+                'Total': total_count
+            })
+        
+        comparison_df = pd.DataFrame(comparison_data)
+        comparison_df = comparison_df.sort_values('Total', ascending=True)
+        
+        # Create simple horizontal bar chart
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            y=comparison_df['Topic'],
+            x=comparison_df['Base Website'],
+            name='Your Website',
+            orientation='h',
+            marker_color='#1f77b4',
+            text=comparison_df['Base Website'],
+            textposition='auto',
+        ))
+        
+        fig.add_trace(go.Bar(
+            y=comparison_df['Topic'],
+            x=comparison_df['Competitors'],
+            name='Competitors',
+            orientation='h',
+            marker_color='#ff7f0e',
+            text=comparison_df['Competitors'],
+            textposition='auto',
+        ))
+        
+        fig.update_layout(
+            title='Topic Comparison: Your Website vs Competitors',
+            xaxis_title='Number of Mentions',
+            yaxis_title='Topics',
+            barmode='group',
+            height=max(600, len(comparison_df) * 25),  # Dynamic height based on number of topics
+            showlegend=True,
+            template='plotly_white',
+            margin=dict(l=200, r=50, t=80, b=50)  # Add left margin for topic labels
+        )
+        
+        # Improve y-axis labels to prevent overlapping
+        fig.update_yaxes(
+            tickfont=dict(size=10),
+            tickangle=0
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Simple insights
+        st.subheader("Key Findings")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Your Top Topics:**")
+            for topic, count in base_topics.most_common(5):
+                st.write(f"• {topic}: {count} mentions")
+        
+        with col2:
+            st.write("**Competitor Top Topics:**")
+            for topic, count in competitor_topics.most_common(5):
+                st.write(f"• {topic}: {count} mentions")
+    
+    def create_topic_comparison_chart(self):
+        """Create a comparison chart of top topics"""
+        if self.base_data.empty or self.competitor_data.empty:
+            st.warning("Need both base and competitor data for comparison")
+            return
+        
+        # Extract topics
+        base_topics = self.extract_topics(self.base_data)
+        competitor_topics = self.extract_topics(self.competitor_data)
+        
+        # Get top 10 topics for each
+        top_base = dict(base_topics.most_common(10))
+        top_competitor = dict(competitor_topics.most_common(10))
+        
+        # Create comparison data
+        all_topics = set(list(top_base.keys()) + list(top_competitor.keys()))
+        
+        comparison_data = []
+        for topic in all_topics:
+            comparison_data.append({
+                'Topic': topic,
+                'Base Website': top_base.get(topic, 0),
+                'Competitors': top_competitor.get(topic, 0)
+            })
+        
+        # Sort by total mentions
+        comparison_df = pd.DataFrame(comparison_data)
+        comparison_df['Total'] = comparison_df['Base Website'] + comparison_df['Competitors']
+        comparison_df = comparison_df.sort_values('Total', ascending=True)
+        
+        # Create horizontal bar chart
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            y=comparison_df['Topic'],
+            x=comparison_df['Base Website'],
+            name='Base Website (Ergosign)',
+            orientation='h',
+            marker_color='#1f77b4',
+            text=comparison_df['Base Website'],
+            textposition='auto',
+        ))
+        
+        fig.add_trace(go.Bar(
+            y=comparison_df['Topic'],
+            x=comparison_df['Competitors'],
+            name='Competitors',
+            orientation='h',
+            marker_color='#ff7f0e',
+            text=comparison_df['Competitors'],
+            textposition='auto',
+        ))
+        
+        fig.update_layout(
+            title='Topic Comparison: Base Website vs Competitors',
+            xaxis_title='Number of Mentions',
+            yaxis_title='Topics',
+            barmode='group',
+            height=600,
+            showlegend=True,
+            template='plotly_white'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def create_topic_trend_chart(self):
+        """Create a trend chart showing topic distribution"""
+        if self.df.empty:
+            return
+        
+        # Extract all topics with website info
+        topic_data = []
+        for _, row in self.df.iterrows():
+            if row['topics'] and row['topics'] != '[]':
+                topics = [topic.strip() for topic in str(row['topics']).split(',')]
+                website_type = 'Base' if 'ergosign' in row['website'].lower() else 'Competitor'
+                for topic in topics:
+                    topic_data.append({
+                        'Topic': topic,
+                        'Website': row['website'],
+                        'Type': website_type,
+                        'Page': row['page_name']
+                    })
+        
+        if not topic_data:
+            st.warning("No topic data available for visualization")
+            return
+        
+        topic_df = pd.DataFrame(topic_data)
+        
+        # Get top 15 topics
+        top_topics = topic_df['Topic'].value_counts().head(15).index.tolist()
+        filtered_df = topic_df[topic_df['Topic'].isin(top_topics)]
+        
+        # Create stacked bar chart
+        fig = px.bar(
+            filtered_df, 
+            x='Topic', 
+            color='Type',
+            title='Topic Distribution by Website Type',
+            color_discrete_map={'Base': '#1f77b4', 'Competitor': '#ff7f0e'},
+            height=500
+        )
+        
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            template='plotly_white',
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def create_website_analysis_chart(self):
+        """Create a comprehensive website analysis chart"""
+        if self.df.empty:
+            return
+        
+        # Group by website
+        website_stats = []
+        for website in self.df['website'].unique():
+            website_data = self.df[self.df['website'] == website]
+            
+            # Extract topics
+            all_topics = []
+            for topics_str in website_data['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topics = [topic.strip() for topic in str(topics_str).split(',')]
+                    all_topics.extend(topics)
+            
+            website_type = 'Base' if 'ergosign' in website.lower() else 'Competitor'
+            
+            website_stats.append({
+                'Website': website,
+                'Type': website_type,
+                'Total Pages': len(website_data),
+                'Unique Topics': len(set(all_topics)),
+                'Total Topic Mentions': len(all_topics),
+                'Avg Topics per Page': len(all_topics) / len(website_data) if len(website_data) > 0 else 0
+            })
+        
+        stats_df = pd.DataFrame(website_stats)
+        
+        # Create subplots
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=('Total Pages', 'Unique Topics', 'Total Topic Mentions', 'Avg Topics per Page'),
+            specs=[[{"type": "bar"}, {"type": "bar"}],
+                   [{"type": "bar"}, {"type": "bar"}]]
+        )
+        
+        # Color mapping
+        colors = ['#1f77b4' if t == 'Base' else '#ff7f0e' for t in stats_df['Type']]
+        
+        # Add traces
+        fig.add_trace(
+            go.Bar(x=stats_df['Website'], y=stats_df['Total Pages'], 
+                   name='Pages', marker_color=colors, showlegend=False),
+            row=1, col=1
+        )
+        
+        fig.add_trace(
+            go.Bar(x=stats_df['Website'], y=stats_df['Unique Topics'], 
+                   name='Topics', marker_color=colors, showlegend=False),
+            row=1, col=2
+        )
+        
+        fig.add_trace(
+            go.Bar(x=stats_df['Website'], y=stats_df['Total Topic Mentions'], 
+                   name='Mentions', marker_color=colors, showlegend=False),
+            row=2, col=1
+        )
+        
+        fig.add_trace(
+            go.Bar(x=stats_df['Website'], y=stats_df['Avg Topics per Page'], 
+                   name='Avg Topics', marker_color=colors, showlegend=False),
+            row=2, col=2
+        )
+        
+        fig.update_layout(
+            title='Website Analysis Overview',
+            height=700,  # Increased height
+            template='plotly_white',
+            showlegend=False,
+            margin=dict(l=50, r=50, t=80, b=150)  # Add bottom margin for rotated labels
+        )
+        
+        # Rotate x-axis labels and improve spacing
+        fig.update_xaxes(
+            tickangle=-45,
+            tickfont=dict(size=9)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def create_topic_cloud_data(self):
+        """Create data for topic cloud visualization"""
+        if self.df.empty:
+            return
+        
+        # Extract all topics
+        all_topics = []
+        for topics_str in self.df['topics'].dropna():
+            if topics_str and topics_str != '[]':
+                topics = [topic.strip() for topic in str(topics_str).split(',')]
+                all_topics.extend(topics)
+        
+        # Count topics
+        topic_counts = Counter(all_topics)
+        
+        # Create word cloud data
+        word_cloud_data = []
+        for topic, count in topic_counts.most_common(20):
+            word_cloud_data.append({
+                'text': topic,
+                'value': count,
+                'size': min(count * 10, 100)  # Scale for visualization
+            })
+        
+        return word_cloud_data
+    
+    def create_professional_analysis(self):
+        """Create professional business analytics visualizations"""
+        if self.df.empty:
+            return
+        
+        st.subheader("Competitive Analysis Dashboard")
+        
+        # Prepare data
+        websites = self.df['website'].unique()
+        base_website = None
+        competitor_websites = []
+        
+        # Identify base website (ergosign) and competitors
+        for website in websites:
+            if 'ergosign' in website.lower():
+                base_website = website
+            else:
+                competitor_websites.append(website)
+        
+        if not base_website:
+            st.warning("Base website (ergosign) not found in data")
+            return
+        
+        # Collect topics for each website
+        website_topics = {}
+        for website in websites:
+            website_data = self.df[self.df['website'] == website]
+            topics = []
+            
+            for topics_str in website_data['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topic_list = [topic.strip() for topic in str(topics_str).split(',')]
+                    topics.extend(topic_list)
+            
+            website_topics[website] = list(set(topics))  # Remove duplicates
+        
+        # Create professional visualizations
+        self._create_topic_coverage_heatmap(website_topics, base_website, competitor_websites)
+        self._create_competitive_positioning_chart(website_topics, base_website, competitor_websites)
+    
+    def _create_topic_coverage_heatmap(self, website_topics, base_website, competitor_websites):
+        """Create a professional topic coverage heatmap"""
+        st.subheader("Topic Coverage Matrix")
+        
+        # Get all unique topics
+        all_topics = set()
+        for topics in website_topics.values():
+            all_topics.update(topics)
+        
+        all_topics = sorted(list(all_topics))
+        all_websites = [base_website] + competitor_websites
+        
+        # Create coverage matrix
+        coverage_matrix = []
+        for website in all_websites:
+            topics = website_topics.get(website, [])
+            row = [1 if topic in topics else 0 for topic in all_topics]
+            coverage_matrix.append(row)
+        
+        # Create heatmap
+        fig = go.Figure(data=go.Heatmap(
+            z=coverage_matrix,
+            x=all_topics,
+            y=all_websites,
+            colorscale='RdYlBu_r',
+            showscale=True,
+            colorbar=dict(title="Coverage"),
+            hoverongaps=False,
+            hovertemplate='<b>%{y}</b><br>Topic: %{x}<br>Covered: %{z}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title='Topic Coverage Across Websites',
+            xaxis_title='Topics',
+            yaxis_title='Websites',
+            height=max(400, len(all_websites) * 30),
+            template='plotly_white',
+            margin=dict(l=150, r=50, t=80, b=100)
+        )
+        
+        fig.update_xaxes(tickangle=-45, tickfont=dict(size=9))
+        fig.update_yaxes(tickfont=dict(size=10))
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def _create_competitive_positioning_chart(self, website_topics, base_website, competitor_websites):
+        """Create competitive positioning analysis"""
+        st.subheader("Competitive Positioning")
+        
+        # Calculate metrics for each website
+        all_topics = set()
+        for topics in website_topics.values():
+            all_topics.update(topics)
+        
+        website_metrics = []
+        for website in [base_website] + competitor_websites:
+            topics = website_topics.get(website, [])
+            coverage_pct = (len(topics) / len(all_topics) * 100) if all_topics else 0
+            
+            website_metrics.append({
+                'Website': website,
+                'Topic Count': len(topics),
+                'Coverage %': coverage_pct,
+                'Type': 'Base' if website == base_website else 'Competitor'
+            })
+        
+        metrics_df = pd.DataFrame(website_metrics)
+        
+        # Create scatter plot
+        fig = go.Figure()
+        
+        # Base website
+        base_data = metrics_df[metrics_df['Type'] == 'Base']
+        if not base_data.empty:
+            fig.add_trace(go.Scatter(
+                x=base_data['Topic Count'],
+                y=base_data['Coverage %'],
+                mode='markers+text',
+                text=base_data['Website'],
+                textposition='top center',
+                marker=dict(size=15, color='red', symbol='star'),
+                name='Your Website'
+            ))
+        
+        # Competitors
+        comp_data = metrics_df[metrics_df['Type'] == 'Competitor']
+        if not comp_data.empty:
+            fig.add_trace(go.Scatter(
+                x=comp_data['Topic Count'],
+                y=comp_data['Coverage %'],
+                mode='markers+text',
+                text=comp_data['Website'],
+                textposition='top center',
+                marker=dict(size=12, color='blue'),
+                name='Competitors'
+            ))
+        
+        fig.update_layout(
+            title='Competitive Positioning: Topic Count vs Coverage',
+            xaxis_title='Number of Topics',
+            yaxis_title='Coverage Percentage',
+            height=500,
+            template='plotly_white'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def _create_llm_visualizations(self, analysis_result):
+        """Create visualizations based on LLM analysis results"""
+        if 'trending_topics' not in analysis_result:
+            return
+        
+        trending = analysis_result['trending_topics']
+        
+        # Create topic trend visualization
+        if 'topic_scores' in trending:
+            topic_scores = trending['topic_scores']
+            
+            # Create bar chart for trending topics
+            fig = go.Figure()
+            
+            topics = list(topic_scores.keys())
+            scores = list(topic_scores.values())
+            
+            fig.add_trace(go.Bar(
+                x=topics,
+                y=scores,
+                marker_color='lightblue',
+                text=scores,
+                textposition='auto'
+            ))
+            
+            fig.update_layout(
+                title='AI-Identified Trending Topics',
+                xaxis_title='Topics',
+                yaxis_title='Trend Score',
+                height=500,
+                template='plotly_white'
+            )
+            
+            fig.update_xaxes(tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+    
+    def _create_fallback_analysis(self, website_topics, base_website, competitor_websites):
+        """Fallback analysis when LLM is not available"""
+        st.subheader("📊 Basic Topic Analysis")
+        
+        # Simple topic comparison
+        base_topics = set(website_topics.get(base_website, []))
+        all_competitor_topics = set()
+        
+        for comp_website in competitor_websites:
+            all_competitor_topics.update(website_topics.get(comp_website, []))
+        
+        # Find unique and common topics
+        unique_to_base = base_topics - all_competitor_topics
+        unique_to_competitors = all_competitor_topics - base_topics
+        common_topics = base_topics & all_competitor_topics
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.write("**Your Unique Topics:**")
+            for topic in list(unique_to_base)[:10]:
+                st.write(f"• {topic}")
+        
+        with col2:
+            st.write("**Competitor Unique Topics:**")
+            for topic in list(unique_to_competitors)[:10]:
+                st.write(f"• {topic}")
+        
+        with col3:
+            st.write("**Common Topics:**")
+            for topic in list(common_topics)[:10]:
+                st.write(f"• {topic}")
+        
+        # Simple metrics
+        st.subheader("Basic Metrics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Your Topics", len(base_topics))
+        
+        with col2:
+            st.metric("Competitor Topics", len(all_competitor_topics))
+        
+        with col3:
+            st.metric("Common Topics", len(common_topics))
+        
+        with col4:
+            st.metric("Your Unique", len(unique_to_base))
+
+    def create_priority_bubble_chart(self):
+        """Create a bubble chart to prioritize missing topics by importance"""
+        if self.df.empty:
+            return
+        
+        # Get all unique topics
+        all_topics = []
+        for topics_str in self.df['topics'].dropna():
+            if topics_str and topics_str != '[]':
+                topics = [topic.strip() for topic in str(topics_str).split(',')]
+                all_topics.extend(topics)
+        
+        unique_topics = list(set(all_topics))
+        if not unique_topics:
+            st.warning("No topics found for bubble chart")
+            return
+        
+        # Calculate metrics for each topic
+        websites = self.df['website'].unique()
+        base_website = websites[0] if len(websites) > 0 else None
+        
+        bubble_data = []
+        for topic in unique_topics:
+            # Count mentions across all websites
+            total_mentions = 0
+            competitor_mentions = 0
+            websites_covering = 0
+            
+            for website in websites:
+                website_data = self.df[self.df['website'] == website]
+                website_topics = []
+                
+                for topics_str in website_data['topics'].dropna():
+                    if topics_str and topics_str != '[]':
+                        topics = [topic.strip() for topic in str(topics_str).split(',')]
+                        website_topics.extend(topics)
+                
+                topic_count = website_topics.count(topic)
+                total_mentions += topic_count
+                
+                if website == base_website:
+                    base_mentions = topic_count
+                else:
+                    competitor_mentions += topic_count
+                
+                if topic_count > 0:
+                    websites_covering += 1
+            
+            # Calculate priority score
+            market_penetration = websites_covering / len(websites) * 100
+            competitor_activity = competitor_mentions
+            base_coverage = base_mentions if base_website else 0
+            
+            # Priority score: high market penetration + high competitor activity + low base coverage
+            priority_score = (market_penetration * 0.4) + (competitor_activity * 0.4) + ((100 - base_coverage) * 0.2)
+            
+            bubble_data.append({
+                'Topic': topic,
+                'Market Penetration': market_penetration,
+                'Competitor Activity': competitor_activity,
+                'Base Coverage': base_coverage,
+                'Priority Score': priority_score,
+                'Total Mentions': total_mentions,
+                'Websites Covering': websites_covering
+            })
+        
+        bubble_df = pd.DataFrame(bubble_data)
+        
+        # Create bubble chart
+        fig = go.Figure()
+        
+        # Color by priority score
+        fig.add_trace(go.Scatter(
+            x=bubble_df['Market Penetration'],
+            y=bubble_df['Competitor Activity'],
+            mode='markers+text',
+            text=bubble_df['Topic'],
+            textposition='top center',
+            marker=dict(
+                size=bubble_df['Total Mentions'] * 5,
+                color=bubble_df['Priority Score'],
+                colorscale='RdYlGn_r',
+                showscale=True,
+                colorbar=dict(title="Priority Score"),
+                line=dict(width=1, color='black')
+            ),
+            hovertemplate='<b>%{text}</b><br>' +
+                         'Market Penetration: %{x:.1f}%<br>' +
+                         'Competitor Activity: %{y}<br>' +
+                         'Priority Score: %{marker.color:.1f}<br>' +
+                         'Total Mentions: %{marker.size}<br>' +
+                         '<extra></extra>',
+            name='Topics'
+        ))
+        
+        fig.update_layout(
+            title='Topic Priority Matrix - Bubble Chart',
+            xaxis_title='Market Penetration (%)',
+            yaxis_title='Competitor Activity (Mentions)',
+            height=700,  # Increased height
+            template='plotly_white',
+            margin=dict(l=100, r=100, t=80, b=80)  # Add margins
+        )
+        
+        # Improve text positioning to prevent overlapping
+        fig.update_traces(
+            textposition='top center',
+            textfont=dict(size=8)  # Smaller text size
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Priority recommendations
+        st.subheader("🎯 Priority Recommendations")
+        
+        # Sort by priority score
+        priority_df = bubble_df.sort_values('Priority Score', ascending=False)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🚀 High Priority (Missing + High Competitor Activity):**")
+            high_priority = priority_df[
+                (priority_df['Base Coverage'] == 0) & 
+                (priority_df['Competitor Activity'] >= 2)
+            ].head(5)
+            
+            for _, row in high_priority.iterrows():
+                st.write(f"• **{row['Topic']}**: {row['Competitor Activity']} competitor mentions, {row['Market Penetration']:.1f}% market penetration")
+        
+        with col2:
+            st.write("**⚡ Medium Priority (Low Coverage + Growing Market):**")
+            medium_priority = priority_df[
+                (priority_df['Base Coverage'] <= 1) & 
+                (priority_df['Market Penetration'] >= 30)
+            ].head(5)
+            
+            for _, row in medium_priority.iterrows():
+                st.write(f"• **{row['Topic']}**: {row['Base Coverage']} current mentions, {row['Market Penetration']:.1f}% market penetration")
+        
+        # Market opportunity analysis
+        st.markdown("---")
+        st.subheader("📊 Market Opportunity Analysis")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_missing = len(priority_df[priority_df['Base Coverage'] == 0])
+            st.metric("Topics We Don't Cover", total_missing)
+        
+        with col2:
+            high_opportunity = len(priority_df[
+                (priority_df['Base Coverage'] == 0) & 
+                (priority_df['Competitor Activity'] >= 2)
+            ])
+            st.metric("High-Opportunity Topics", high_opportunity)
+        
+        with col3:
+            avg_priority = priority_df['Priority Score'].mean()
+            st.metric("Average Priority Score", f"{avg_priority:.1f}")
+
+    def create_trend_timeline(self):
+        """Create a trend timeline for month-to-month tracking"""
+        if self.df.empty:
+            return
+        
+        # Check if we have date information
+        if 'last_scraped' not in self.df.columns:
+            st.warning("No date information available for trend analysis. Add 'last_scraped' column to enable timeline tracking.")
+            return
+        
+        # Convert last_scraped to datetime
+        try:
+            self.df['scrape_date'] = pd.to_datetime(self.df['last_scraped'])
+            self.df['month'] = self.df['scrape_date'].dt.to_period('M')
+        except:
+            st.warning("Could not parse date information for trend analysis")
+            return
+        
+        # Get unique months
+        months = sorted(self.df['month'].unique())
+        if len(months) < 2:
+            st.info("Need data from at least 2 different months to show trends")
+            return
+        
+        # Create trend data
+        trend_data = []
+        for month in months:
+            month_data = self.df[self.df['month'] == month]
+            
+            # Extract topics for this month
+            month_topics = []
+            for topics_str in month_data['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topics = [topic.strip() for topic in str(topics_str).split(',')]
+                    month_topics.extend(topics)
+            
+            topic_counts = Counter(month_topics)
+            
+            # Separate base and competitor topics
+            base_data = month_data[month_data['website'].str.contains('ergosign', case=False, na=False)]
+            comp_data = month_data[~month_data['website'].str.contains('ergosign', case=False, na=False)]
+            
+            base_topics = []
+            for topics_str in base_data['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topics = [topic.strip() for topic in str(topics_str).split(',')]
+                    base_topics.extend(topics)
+            
+            comp_topics = []
+            for topics_str in comp_data['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topics = [topic.strip() for topic in str(topics_str).split(',')]
+                    comp_topics.extend(topics)
+            
+            base_counts = Counter(base_topics)
+            comp_counts = Counter(comp_topics)
+            
+            trend_data.append({
+                'Month': str(month),
+                'Total Topics': len(topic_counts),
+                'Base Topics': len(base_counts),
+                'Competitor Topics': len(comp_counts),
+                'Total Mentions': sum(topic_counts.values()),
+                'Base Mentions': sum(base_counts.values()),
+                'Competitor Mentions': sum(comp_counts.values())
+            })
+        
+        trend_df = pd.DataFrame(trend_data)
+        
+        # Create trend charts
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Topic Count Trends',
+                'Mention Volume Trends',
+                'Base vs Competitor Topics',
+                'Market Share Trends'
+            ),
+            specs=[[{"type": "scatter"}, {"type": "scatter"}],
+                   [{"type": "scatter"}, {"type": "scatter"}]]
+        )
+        
+        # 1. Topic count trends
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Total Topics'],
+                mode='lines+markers',
+                name='Total Topics',
+                line=dict(color='#1f77b4', width=3)
+            ),
+            row=1, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Base Topics'],
+                mode='lines+markers',
+                name='Base Topics',
+                line=dict(color='#2E8B57', width=2)
+            ),
+            row=1, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Competitor Topics'],
+                mode='lines+markers',
+                name='Competitor Topics',
+                line=dict(color='#FF6B6B', width=2)
+            ),
+            row=1, col=1
+        )
+        
+        # 2. Mention volume trends
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Total Mentions'],
+                mode='lines+markers',
+                name='Total Mentions',
+                line=dict(color='#FF7F0E', width=3),
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Base Mentions'],
+                mode='lines+markers',
+                name='Base Mentions',
+                line=dict(color='#2E8B57', width=2),
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Competitor Mentions'],
+                mode='lines+markers',
+                name='Competitor Mentions',
+                line=dict(color='#FF6B6B', width=2),
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+        
+        # 3. Base vs Competitor comparison
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Base Topics'],
+                y=trend_df['Competitor Topics'],
+                mode='markers+text',
+                text=trend_df['Month'],
+                textposition='top center',
+                marker=dict(
+                    size=trend_df['Total Topics'] * 2,
+                    color=trend_df['Total Topics'],
+                    colorscale='Viridis',
+                    showscale=True,
+                    colorbar=dict(title="Total Topics")
+                ),
+                name='Monthly Comparison',
+                showlegend=False
+            ),
+            row=2, col=1
+        )
+        
+        # 4. Market share trends
+        trend_df['Base Share'] = (trend_df['Base Mentions'] / trend_df['Total Mentions'] * 100).fillna(0)
+        trend_df['Competitor Share'] = (trend_df['Competitor Mentions'] / trend_df['Total Mentions'] * 100).fillna(0)
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Base Share'],
+                mode='lines+markers',
+                name='Base Market Share',
+                line=dict(color='#2E8B57', width=3),
+                fill='tonexty',
+                showlegend=False
+            ),
+            row=2, col=2
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=trend_df['Month'],
+                y=trend_df['Competitor Share'],
+                mode='lines+markers',
+                name='Competitor Market Share',
+                line=dict(color='#FF6B6B', width=3),
+                fill='tozeroy',
+                showlegend=False
+            ),
+            row=2, col=2
+        )
+        
+        fig.update_layout(
+            title='📈 Topic Trends Timeline - Month-to-Month Analysis',
+            height=800,
+            template='plotly_white',
+            showlegend=True
+        )
+        
+        # Update axes labels
+        fig.update_xaxes(title_text="Month", row=1, col=1)
+        fig.update_yaxes(title_text="Topic Count", row=1, col=1)
+        fig.update_xaxes(title_text="Month", row=1, col=2)
+        fig.update_yaxes(title_text="Mention Count", row=1, col=2)
+        fig.update_xaxes(title_text="Base Topics", row=2, col=1)
+        fig.update_yaxes(title_text="Competitor Topics", row=2, col=1)
+        fig.update_xaxes(title_text="Month", row=2, col=2)
+        fig.update_yaxes(title_text="Market Share %", row=2, col=2)
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Trend insights
+        st.subheader("📊 Trend Insights")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Calculate growth rates
+            if len(trend_df) >= 2:
+                latest = trend_df.iloc[-1]
+                previous = trend_df.iloc[-2]
+                
+                topic_growth = ((latest['Total Topics'] - previous['Total Topics']) / previous['Total Topics'] * 100) if previous['Total Topics'] > 0 else 0
+                st.metric("Topic Growth Rate", f"{topic_growth:+.1f}%")
+        
+        with col2:
+            if len(trend_df) >= 2:
+                mention_growth = ((latest['Total Mentions'] - previous['Total Mentions']) / previous['Total Mentions'] * 100) if previous['Total Mentions'] > 0 else 0
+                st.metric("Mention Growth Rate", f"{mention_growth:+.1f}%")
+        
+        with col3:
+            if len(trend_df) >= 2:
+                share_change = latest['Base Share'] - previous['Base Share']
+                st.metric("Market Share Change", f"{share_change:+.1f}%")
+        
+        # Trend recommendations
+        st.markdown("---")
+        st.subheader("🎯 Trend-Based Recommendations")
+        
+        if len(trend_df) >= 2:
+            latest = trend_df.iloc[-1]
+            previous = trend_df.iloc[-2]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if latest['Base Topics'] < previous['Base Topics']:
+                    st.write("**⚠️ Declining Topic Diversity:**")
+                    st.write("• Focus on expanding topic coverage")
+                    st.write("• Analyze competitor topics for inspiration")
+                elif latest['Base Topics'] > previous['Base Topics']:
+                    st.write("**✅ Growing Topic Diversity:**")
+                    st.write("• Continue expanding topic coverage")
+                    st.write("• Monitor competitor response")
+            
+            with col2:
+                if latest['Base Share'] < previous['Base Share']:
+                    st.write("**⚠️ Losing Market Share:**")
+                    st.write("• Increase content frequency")
+                    st.write("• Focus on high-impact topics")
+                elif latest['Base Share'] > previous['Base Share']:
+                    st.write("**✅ Gaining Market Share:**")
+                    st.write("• Maintain current strategy")
+                    st.write("• Consider expanding successful topics")
+
+    def create_strategic_analysis(self):
+        """Create strategic competitive analysis"""
+        if self.base_data.empty or self.competitor_data.empty:
+            st.warning("Need both base and competitor data for strategic analysis")
+            return
+        
+        # Extract topics
+        base_topics = self.extract_topics(self.base_data)
+        competitor_topics = self.extract_topics(self.competitor_data)
+        
+        # Calculate strategic metrics
+        all_topics = set(list(base_topics.keys()) + list(competitor_topics.keys()))
+        
+        strategic_data = []
+        for topic in all_topics:
+            base_count = base_topics.get(topic, 0)
+            comp_count = competitor_topics.get(topic, 0)
+            total_count = base_count + comp_count
+            
+            # Strategic positioning
+            if base_count > comp_count:
+                position = "Market Leader"
+                opportunity = "Maintain Leadership"
+            elif comp_count > base_count:
+                position = "Market Follower"
+                opportunity = "Catch Up Opportunity"
+            else:
+                position = "Market Parity"
+                opportunity = "Differentiation Opportunity"
+            
+            # Calculate growth potential
+            growth_potential = "High" if total_count >= 3 else ("Medium" if total_count >= 2 else "Low")
+            
+            strategic_data.append({
+                'Topic': topic,
+                'Base Count': base_count,
+                'Competitor Count': comp_count,
+                'Total Market': total_count,
+                'Position': position,
+                'Opportunity': opportunity,
+                'Growth Potential': growth_potential,
+                'Market Share': (base_count / total_count * 100) if total_count > 0 else 0
+            })
+        
+        strategic_df = pd.DataFrame(strategic_data)
+        
+        # Create strategic analysis chart
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Market Position Analysis',
+                'Growth Potential by Topic',
+                'Strategic Opportunities',
+                'Market Share Distribution'
+            ),
+            specs=[[{"type": "bar"}, {"type": "bar"}],
+                   [{"type": "pie"}, {"type": "bar"}]]
+        )
+        
+        # 1. Market position
+        position_counts = strategic_df['Position'].value_counts()
+        fig.add_trace(
+            go.Bar(
+                x=position_counts.index,
+                y=position_counts.values,
+                name='Market Position',
+                marker_color=['#2E8B57', '#FF6B6B', '#FFA500']
+            ),
+            row=1, col=1
+        )
+        
+        # 2. Growth potential
+        growth_counts = strategic_df['Growth Potential'].value_counts()
+        fig.add_trace(
+            go.Bar(
+                x=growth_counts.index,
+                y=growth_counts.values,
+                name='Growth Potential',
+                marker_color=['#FF6B6B', '#FFA500', '#2E8B57']
+            ),
+            row=1, col=2
+        )
+        
+        # 3. Strategic opportunities
+        opportunity_counts = strategic_df['Opportunity'].value_counts()
+        fig.add_trace(
+            go.Pie(
+                labels=opportunity_counts.index,
+                values=opportunity_counts.values,
+                name="Opportunities",
+                marker_colors=['#4ECDC4', '#45B7D1', '#96CEB4']
+            ),
+            row=2, col=1
+        )
+        
+        # 4. Top market share topics
+        top_market_share = strategic_df.nlargest(10, 'Market Share')
+        fig.add_trace(
+            go.Bar(
+                x=top_market_share['Topic'],
+                y=top_market_share['Market Share'],
+                name='Market Share %',
+                marker_color='#8A2BE2'
+            ),
+            row=2, col=2
+        )
+        
+        fig.update_layout(
+            title='🎯 Strategic Competitive Analysis',
+            height=800,
+            template='plotly_white',
+            showlegend=False
+        )
+        
+        fig.update_xaxes(tickangle=-45, row=2, col=2)
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Strategic recommendations
+        st.subheader("💡 Strategic Recommendations")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🚀 High-Priority Actions:**")
+            leaders = strategic_df[strategic_df['Position'] == 'Market Leader'].head(3)
+            for _, row in leaders.iterrows():
+                st.write(f"• **{row['Topic']}**: Maintain leadership ({(row['Market Share']):.1f}% share)")
+            
+            st.write("**⚡ Quick Wins:**")
+            followers = strategic_df[strategic_df['Position'] == 'Market Follower'].head(3)
+            for _, row in followers.iterrows():
+                st.write(f"• **{row['Topic']}**: Focus on catching up ({(row['Market Share']):.1f}% share)")
+        
+        with col2:
+            st.write("**🎯 Growth Opportunities:**")
+            high_growth = strategic_df[strategic_df['Growth Potential'] == 'High'].head(3)
+            for _, row in high_growth.iterrows():
+                st.write(f"• **{row['Topic']}**: High market activity ({row['Total Market']} mentions)")
+            
+            st.write("**🔍 Market Gaps:**")
+            low_activity = strategic_df[strategic_df['Total Market'] == 1].head(3)
+            for _, row in low_activity.iterrows():
+                st.write(f"• **{row['Topic']}**: Underserved market opportunity")
+
+    def display_metrics(self):
+        """Display key metrics"""
+        if self.df.empty:
+            return
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Websites", len(self.df['website'].unique()))
+        
+        with col2:
+            st.metric("Total Pages", len(self.df))
+        
+        with col3:
+            all_topics = []
+            for topics_str in self.df['topics'].dropna():
+                if topics_str and topics_str != '[]':
+                    topics = [topic.strip() for topic in str(topics_str).split(',')]
+                    all_topics.extend(topics)
+            st.metric("Unique Topics", len(set(all_topics)))
+        
+        with col4:
+            base_pages = len(self.base_data) if not self.base_data.empty else 0
+            competitor_pages = len(self.competitor_data) if not self.competitor_data.empty else 0
+            st.metric("Base vs Competitor Pages", f"{base_pages} : {competitor_pages}")
+
+def show_topic_visualization():
+    """Main function to display topic visualizations"""
+    st.header("📊 Topic Analysis & Comparison")
+    
+    visualizer = TopicVisualizer()
+    
+    if not visualizer.load_data():
+        return
+    
+    # Display metrics
+    visualizer.display_metrics()
+    
+    st.markdown("---")
+    
+    # Create tabs for different analysis views
+    tab1, tab2 = st.tabs([
+        "📊 Competitive Analysis", 
+        "📈 Website Metrics"
+    ])
+    
+    with tab1:
+        st.subheader("Competitive Analysis Dashboard")
+        st.write("Professional business analytics for competitor analysis")
+        visualizer.create_professional_analysis()
+    
+    with tab2:
+        st.subheader("Website Performance Metrics")
+        st.write("Individual website performance and topic analysis")
+        visualizer.create_website_analysis_chart()
+    
+    st.markdown("---")
+    
+    # Simple insights section
+    st.subheader("Summary")
+    
+    if not visualizer.base_data.empty and not visualizer.competitor_data.empty:
+        base_topics = visualizer.extract_topics(visualizer.base_data)
+        competitor_topics = visualizer.extract_topics(visualizer.competitor_data)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Your Topics", len(base_topics))
+        
+        with col2:
+            st.metric("Competitor Topics", len(competitor_topics))
+        
+        with col3:
+            common_topics = set(base_topics.keys()) & set(competitor_topics.keys())
+            st.metric("Common Topics", len(common_topics))
+        
+        # Simple findings
+        st.markdown("---")
+        st.subheader("Key Findings")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Your Unique Topics:**")
+            unique_base = set(base_topics.keys()) - set(competitor_topics.keys())
+            for topic in list(unique_base)[:5]:
+                st.write(f"• {topic}")
+        
+        with col2:
+            st.write("**Competitor Unique Topics:**")
+            unique_comp = set(competitor_topics.keys()) - set(base_topics.keys())
+            for topic in list(unique_comp)[:5]:
+                st.write(f"• {topic}")

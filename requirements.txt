@@ -1,10 +1,25 @@
-streamlit 
-langchain 
-langchain_ollama
-selenium
-beautifulsoup4
-lxml 
-html5lib
-python-dotenv
-# openai>=1.40.0
+# Core web framework
+streamlit>=1.28.0
+
+# Web scraping dependencies
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+html5lib>=1.1
+
+# Data processing
+pandas>=2.0.0
 requests>=2.31.0
+
+# Google Sheets integration
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+google-api-python-client>=2.100.0
+
+# Visualization
+plotly>=5.17.0
+
+# Configuration management
+python-dotenv>=1.0.0
+

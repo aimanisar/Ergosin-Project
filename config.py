@@ -1,11 +1,16 @@
-# config.py
+#!/usr/bin/env python3
 """
-Configuration file for the Ergosin Project scraper.
-Holds constants like CSV paths, site list, and blocked URL patterns.
+Configuration file for the Competitive Intelligence Dashboard.
+
+This module contains all configuration constants including:
+- Data storage paths
+- Website lists for scraping
+- Blocked URL patterns
+- Google Sheets integration settings
 """
 
-# Path to save scraped data
-CSV_PATH = "scraped_data.csv"
+# Google Sheets configuration
+GOOGLE_SHEETS_ID = "1OT97TTg0OnH-eFnRmw3-FAxrctFxB6BwB739A97fvbg"
 
 # List of sites to scrape (base + competitors)
 SITES = [
