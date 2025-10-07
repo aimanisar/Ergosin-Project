@@ -389,7 +389,7 @@ class TopicVisualizer:
             st.warning("Base website (ergosign) not found in data")
             return
         
-        # Collect topics for each website
+        # Collect topics for each website (keep frequency data)
         website_topics = {}
         for website in websites:
             website_data = self.df[self.df['website'] == website]
@@ -400,15 +400,15 @@ class TopicVisualizer:
                     topic_list = [topic.strip() for topic in str(topics_str).split(',')]
                     topics.extend(topic_list)
             
-            website_topics[website] = list(set(topics))  # Remove duplicates
+            website_topics[website] = topics  # Keep all mentions for accurate counting
         
         # Create professional visualizations
         self._create_topic_coverage_heatmap(website_topics, base_website, competitor_websites)
         self._create_competitive_positioning_chart(website_topics, base_website, competitor_websites)
     
     def _create_topic_coverage_heatmap(self, website_topics, base_website, competitor_websites):
-        """Create a professional topic coverage heatmap"""
-        st.subheader("Topic Coverage Matrix")
+        """Create a smart, scalable topic coverage visualization"""
+        st.subheader("🎯 Smart Competitive Analysis Dashboard")
         
         # Get all unique topics
         all_topics = set()
@@ -418,38 +418,185 @@ class TopicVisualizer:
         all_topics = sorted(list(all_topics))
         all_websites = [base_website] + competitor_websites
         
-        # Create coverage matrix
-        coverage_matrix = []
-        for website in all_websites:
-            topics = website_topics.get(website, [])
-            row = [1 if topic in topics else 0 for topic in all_topics]
-            coverage_matrix.append(row)
+        # Smart filtering options
+        col1, col2, col3 = st.columns(3)
         
-        # Create heatmap
-        fig = go.Figure(data=go.Heatmap(
-            z=coverage_matrix,
-            x=all_topics,
-            y=all_websites,
-            colorscale='RdYlBu_r',
-            showscale=True,
-            colorbar=dict(title="Coverage"),
-            hoverongaps=False,
-            hovertemplate='<b>%{y}</b><br>Topic: %{x}<br>Covered: %{z}<extra></extra>'
-        ))
+        with col1:
+            # Filter by topic importance
+            topic_importance = st.selectbox(
+                "Filter by Topic Importance:",
+                ["All Topics", "High Impact (5+ mentions)", "Medium Impact (2-4 mentions)", "Low Impact (1 mention)"],
+                key="topic_filter"
+            )
         
-        fig.update_layout(
-            title='Topic Coverage Across Websites',
-            xaxis_title='Topics',
-            yaxis_title='Websites',
-            height=max(400, len(all_websites) * 30),
-            template='plotly_white',
-            margin=dict(l=150, r=50, t=80, b=100)
-        )
+        with col2:
+            # Filter by competitor group
+            competitor_filter = st.selectbox(
+                "Filter by Competitor Group:",
+                ["All Competitors", "Top 5 Competitors", "Top 10 Competitors", "Ergosign vs Top 3"],
+                key="competitor_filter"
+            )
         
-        fig.update_xaxes(tickangle=-45, tickfont=dict(size=9))
-        fig.update_yaxes(tickfont=dict(size=10))
+        with col3:
+            # Show only gaps
+            show_gaps_only = st.checkbox("Show Only Ergosign Gaps", value=False)
         
-        st.plotly_chart(fig, use_container_width=True)
+        # Apply filters
+        filtered_topics = self._filter_topics_by_importance(all_topics, website_topics, topic_importance)
+        filtered_websites = self._filter_websites_by_group(all_websites, competitor_filter, base_website)
+        
+        if show_gaps_only:
+            filtered_topics = self._filter_ergosign_gaps(filtered_topics, website_topics, base_website)
+        
+        # Show only the Priority List
+        self._create_topic_priority_list(filtered_topics, website_topics, base_website)
+    
+    def _filter_topics_by_importance(self, all_topics, website_topics, importance_filter):
+        """Filter topics based on importance/mention frequency"""
+        if importance_filter == "All Topics":
+            return all_topics
+        
+        # Count total mentions across all websites
+        topic_counts = {}
+        for topic in all_topics:
+            count = sum(website_topics.get(website, []).count(topic) for website in website_topics.keys())
+            topic_counts[topic] = count
+        
+        if importance_filter == "High Impact (5+ mentions)":
+            return [topic for topic, count in topic_counts.items() if count >= 5]
+        elif importance_filter == "Medium Impact (2-4 mentions)":
+            return [topic for topic, count in topic_counts.items() if 2 <= count < 5]
+        elif importance_filter == "Low Impact (1 mention)":
+            return [topic for topic, count in topic_counts.items() if count == 1]
+        
+        return all_topics
+    
+    def _filter_websites_by_group(self, all_websites, group_filter, base_website):
+        """Filter websites by competitor group"""
+        if group_filter == "All Competitors":
+            return all_websites
+        elif group_filter == "Top 5 Competitors":
+            # Return base + top 5 competitors (simplified for now)
+            return [base_website] + all_websites[1:6]
+        elif group_filter == "Top 10 Competitors":
+            return [base_website] + all_websites[1:11]
+        elif group_filter == "Ergosign vs Top 3":
+            return [base_website] + all_websites[1:4]
+        
+        return all_websites
+    
+    def _filter_ergosign_gaps(self, topics, website_topics, base_website):
+        """Filter to show only topics where Ergosign has gaps"""
+        ergosign_topics = set(website_topics.get(base_website, []))
+        return [topic for topic in topics if topic not in ergosign_topics]
+    
+    
+    def _create_topic_priority_list(self, topics, website_topics, base_website):
+        """Create a priority-ordered list of topics"""
+        if not topics:
+            st.warning("No topics match the current filters.")
+            return
+        
+        # Calculate priority metrics
+        priority_data = []
+        ergosign_topics = set(website_topics.get(base_website, []))
+        
+        # Debug info
+        st.caption(f"📊 Analyzing {len(topics)} topics across {len(website_topics)} websites")
+        
+        for topic in topics:
+            competitor_mentions = sum(website_topics.get(website, []).count(topic) 
+                                    for website in website_topics.keys() if website != base_website)
+            ergosign_mentions = website_topics.get(base_website, []).count(topic)
+            
+            # Enhanced priority calculation with more nuanced logic
+            if topic not in ergosign_topics:
+                if competitor_mentions >= 5:
+                    priority = "🔴 CRITICAL"
+                    action = "URGENT: Start covering this high-impact topic"
+                elif competitor_mentions >= 2:
+                    priority = "🟠 HIGH"
+                    action = "Start covering this topic"
+                else:
+                    priority = "🟡 MEDIUM"
+                    action = "Consider covering this topic"
+            elif ergosign_mentions < competitor_mentions:
+                gap_ratio = competitor_mentions / ergosign_mentions if ergosign_mentions > 0 else competitor_mentions
+                if gap_ratio >= 3:
+                    priority = "🔴 CRITICAL"
+                    action = f"URGENT: Increase coverage (behind by {competitor_mentions - ergosign_mentions})"
+                elif gap_ratio >= 2:
+                    priority = "🟠 HIGH"
+                    action = f"Increase coverage (behind by {competitor_mentions - ergosign_mentions})"
+                else:
+                    priority = "🟡 MEDIUM"
+                    action = f"Slightly increase coverage (behind by {competitor_mentions - ergosign_mentions})"
+            elif ergosign_mentions == competitor_mentions:
+                priority = "🟢 MEDIUM"
+                action = "Maintain current position"
+            else:
+                lead_ratio = ergosign_mentions / competitor_mentions if competitor_mentions > 0 else ergosign_mentions
+                if lead_ratio >= 2:
+                    priority = "✅ LOW"
+                    action = "Continue leading (strong position)"
+                else:
+                    priority = "🟢 LOW"
+                    action = "Continue leading (slight advantage)"
+            
+            priority_data.append({
+                'Topic': topic,
+                'Priority': priority,
+                'Action': action,
+                'Ergosign': ergosign_mentions,
+                'Competitors': competitor_mentions
+            })
+        
+        # Enhanced sorting: Priority first, then by competitor mentions (higher activity first)
+        priority_order = {"🔴 CRITICAL": 4, "🟠 HIGH": 3, "🟡 MEDIUM": 2, "🟢 MEDIUM": 1, "🟢 LOW": 0, "✅ LOW": 0}
+        priority_data.sort(key=lambda x: (priority_order.get(x['Priority'], 0), -x['Competitors']), reverse=True)
+        
+        # Display as table
+        df = pd.DataFrame(priority_data)
+        
+        # Enhanced color coding with proper text visibility
+        def color_priority(val):
+            if val == "🔴 CRITICAL":
+                return 'background-color: #ffebee; color: #d32f2f; font-weight: bold'
+            elif val == "🟠 HIGH":
+                return 'background-color: #fff3e0; color: #f57c00; font-weight: bold'
+            elif val == "🟡 MEDIUM":
+                return 'background-color: #fffde7; color: #f9a825'
+            elif val == "🟢 MEDIUM":
+                return 'background-color: #e8f5e8; color: #388e3c'
+            elif val == "🟢 LOW":
+                return 'background-color: #f1f8e9; color: #689f38'
+            else:  # ✅ LOW
+                return 'background-color: #f3e5f5; color: #7b1fa2'
+        
+        styled_df = df.style.applymap(color_priority, subset=['Priority'])
+        
+        # Add summary statistics
+        critical_count = len([p for p in priority_data if "🔴" in p['Priority']])
+        high_count = len([p for p in priority_data if "🟠" in p['Priority']])
+        medium_count = len([p for p in priority_data if "🟡" in p['Priority']])
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🔴 Critical", critical_count)
+        with col2:
+            st.metric("🟠 High Priority", high_count)
+        with col3:
+            st.metric("🟡 Medium Priority", medium_count)
+        with col4:
+            st.metric("Total Topics", len(priority_data))
+        
+        st.dataframe(styled_df, use_container_width=True)
+        
+        # Add insights
+        if critical_count > 0:
+            st.warning(f"⚠️ {critical_count} topics require immediate attention!")
+        if high_count > 0:
+            st.info(f"💡 {high_count} topics have high strategic value")
     
     def _create_competitive_positioning_chart(self, website_topics, base_website, competitor_websites):
         """Create competitive positioning analysis"""

@@ -3,7 +3,7 @@
 Data Storage Module for Competitive Intelligence Dashboard.
 
 This module handles all data persistence operations including:
-- Google Sheets integration for data storage
+- Milvus vector database integration for data storage
 - Data merging and caching functionality
 - Content hashing for change detection
 - Error handling and fallback mechanisms
@@ -12,7 +12,7 @@ This module handles all data persistence operations including:
 import pandas as pd
 import hashlib
 
-from google_sheets_storage import get_sheets_storage
+from milvus_storage import get_milvus_storage
 
 def make_hash(text: str) -> str:
     """Generate MD5 hash of text for change detection."""
@@ -20,29 +20,23 @@ def make_hash(text: str) -> str:
 
 
 def load_cache() -> pd.DataFrame:
-    """Load existing data from Google Sheets into a DataFrame, or return empty DataFrame if none exists."""
+    """Load existing data from Milvus into a DataFrame, or return empty DataFrame if none exists."""
     try:
-        sheets_storage = get_sheets_storage()
-        return sheets_storage.load_cache()
+        milvus_storage = get_milvus_storage()
+        return milvus_storage.load_cache()
     except Exception as e:
         import streamlit as st
-        import ssl
         
-        # Check if it's an SSL error
-        if isinstance(e, ssl.SSLError) or "SSL" in str(e) or "DECRYPTION_FAILED" in str(e):
-            st.warning("🔒 **SSL Connection Issue Detected**")
-            st.info("**Possible Solutions:**")
-            st.info("1. **Check your internet connection**")
-            st.info("2. **Try using a VPN** if you're behind a corporate firewall")
-            st.info("3. **Restart your application**")
-            st.info("4. **Update your Python SSL certificates**")
-            st.info("5. **Try again in a few minutes** - this might be a temporary network issue")
-            
-            # Show a retry button
-            if st.button("🔄 Retry Connection", key="retry_ssl"):
-                st.rerun()
-        else:
-            st.error(f"Error loading from Google Sheets: {e}")
+        st.error(f"Error loading from Milvus: {e}")
+        st.info("**Possible Solutions:**")
+        st.info("1. **Make sure Milvus is running** on localhost:19530")
+        st.info("2. **Check your Milvus connection settings** in config.py")
+        st.info("3. **Restart the application**")
+        st.info("4. **Install Milvus** if not already installed")
+        
+        # Show a retry button
+        if st.button("🔄 Retry Connection", key="retry_milvus"):
+            st.rerun()
         
         # Fallback to empty DataFrame
         return pd.DataFrame(columns=[
@@ -52,27 +46,27 @@ def load_cache() -> pd.DataFrame:
 
 
 def save_cache(df: pd.DataFrame) -> None:
-    """Save DataFrame to Google Sheets, overwriting the old cache."""
+    """Save DataFrame to Milvus, overwriting the old cache."""
     if df is None or df.empty:
         return
     try:
-        sheets_storage = get_sheets_storage()
-        sheets_storage.save_cache(df)
+        milvus_storage = get_milvus_storage()
+        milvus_storage.save_cache(df)
     except Exception as e:
         import streamlit as st
-        st.error(f"Error saving to Google Sheets: {e}")
+        st.error(f"Error saving to Milvus: {e}")
 
 
 def merge_with_cache(new_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Merge new scraped rows with existing cache from Google Sheets.
+    Merge new scraped rows with existing cache from Milvus.
     Always keeps the latest version of each page_url.
     """
     try:
-        sheets_storage = get_sheets_storage()
-        return sheets_storage.merge_with_cache(new_df)
+        milvus_storage = get_milvus_storage()
+        return milvus_storage.merge_with_cache(new_df)
     except Exception as e:
         import streamlit as st
-        st.error(f"Error merging with Google Sheets cache: {e}")
+        st.error(f"Error merging with Milvus cache: {e}")
         # Fallback to just returning the new data
         return new_df

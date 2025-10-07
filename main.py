@@ -72,13 +72,23 @@ with st.expander("Data status & downloads", expanded=False):
         df = load_cache()
         if not df.empty:
             st.write(f"**Data** — {df.shape[0]} rows")
-            st.download_button(
-                "⬇️ Download CSV",
-                df.to_csv(index=False).encode("utf-8"),
-                file_name="scraped_data.csv",
-                mime="text/csv",
-                key="dl_data"
-            )
+            
+            # Add cleanup button
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.download_button(
+                    "⬇️ Download CSV",
+                    df.to_csv(index=False).encode("utf-8"),
+                    file_name="scraped_data.csv",
+                    mime="text/csv",
+                    key="dl_data"
+                )
+            with col2:
+                if st.button("🧹 Clean Duplicates", key="cleanup_duplicates"):
+                    from milvus_storage import get_milvus_storage
+                    milvus_storage = get_milvus_storage()
+                    milvus_storage.cleanup_duplicates()
+                    st.rerun()
         else:
             st.info("No data available yet.")
     except Exception as e:

@@ -9,8 +9,16 @@ This module contains all configuration constants including:
 - Google Sheets integration settings
 """
 
-# Google Sheets configuration
-GOOGLE_SHEETS_ID = "1OT97TTg0OnH-eFnRmw3-FAxrctFxB6BwB739A97fvbg"
+# Milvus configuration (Zilliz Cloud)
+MILVUS_HOST = "in03-b7890c38c8613f7.serverless.aws-eu-central-1.cloud.zilliz.com"
+MILVUS_PORT = "443"  # HTTPS port for Zilliz Cloud
+MILVUS_COLLECTION_NAME = "scraped_data"  # New collection matching Google Sheets schema
+MILVUS_DIMENSION = 768  # Standard embedding dimension
+MILVUS_LITE = False  # Use Zilliz Cloud
+MILVUS_TOKEN = "2b7fdfd0b0b9be5be2b4ba4eb2a9126e2d6b5b52da4c4ec09a0c32cff1ac96c657aa5bb38a74beada6c92dfc59a5d578daf13db9"
+
+# Google Sheets configuration (disabled)
+# GOOGLE_SHEETS_ID = "1OT97TTg0OnH-eFnRmw3-FAxrctFxB6BwB739A97fvbg"
 
 # List of sites to scrape (base + competitors)
 SITES = [
