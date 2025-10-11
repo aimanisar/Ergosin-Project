@@ -6,6 +6,8 @@ from storage import load_cache, save_cache
 from topic_visualization import show_topic_visualization
 from workflow import scrape_all_sites, scrape_site_with_cache
 from ui_theme import apply_theme
+import time
+from embeddings import GlobalSearchEngine
 
 # --------------------------- Modern UI Styling ---------------------------
 st.set_page_config(page_title="Competitive Intelligence Dashboard", layout="wide")
@@ -256,3 +258,28 @@ with tab_international:
         st.info("⚠️ No data available yet. Run scraper first.")
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------------- Global search UI (add this block where appropriate) ----------------------
+with st.sidebar.expander("Global search across scraped content", expanded=False):
+    query = st.text_input("Search query", key="global_search_q")
+    if "search_engine" not in st.session_state:
+        # build once from cache (cheap if cache is small; store engine in session_state)
+        df_cache = load_cache()
+        engine = GlobalSearchEngine()
+        engine.build_index_from_dataframe(df_cache)
+        st.session_state["search_engine"] = engine
+        st.session_state["search_index_built_at"] = time.time()
+    engine: GlobalSearchEngine = st.session_state.get("search_engine")
+
+    if st.button("Search", use_container_width=True):
+        q = (st.session_state.get("global_search_q") or "").strip()
+        if not q:
+            st.info("Enter a query.")
+        else:
+            results = engine.query(q, top_k=15)
+            if not results:
+                st.info("No matches found.")
+            else:
+                for meta, score in results:
+                    st.markdown(f"**{meta['page_name']}** — <{meta['url']}> — score: {score:.3f}", unsafe_allow_html=True)
+                    st.write(meta["chunk_text"][:600] + ("..." if len(meta["chunk_text"]) > 600 else ""))
