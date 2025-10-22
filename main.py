@@ -104,19 +104,22 @@ h2, h3, .stMarkdown h2, .stMarkdown h3 {
 
 /* ===== Buttons ===== */
 div.stButton > button {
-    background-color: #2563eb;
-    color: white;
-    border-radius: 6px;
+    background: linear-gradient(90deg, #2563eb, #9333ea);
+    color: white !important;
+    border-radius: 8px;
     font-weight: 600;
-    padding: 0.5rem 1.2rem;
+    padding: 0.55rem 1.3rem;
     border: none;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 div.stButton > button:hover {
-    background-color: #1d4ed8;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+    background: linear-gradient(90deg, #1d4ed8, #7e22ce);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(147,51,234,0.4);
 }
+
 
 /* ===== Tables / Dataframes ===== */
 .stDataFrame, .stTable {
@@ -225,50 +228,132 @@ if not df_cache.empty and "last_scraped" in df_cache.columns:
         last_updated = "recently"
 
 st.markdown(f"""
-<div style="background: linear-gradient(90deg, #2563eb, #9333ea);
-            padding: 1.5rem 2rem;
-            border-radius: 12px;
-            color: white;
-            margin-bottom: 25px;">
+    <div>         
+# <div style="background: linear-gradient(90deg, #2563eb, #9333ea);
+#             padding: 1.5rem 2rem;
+#             border-radius: 12px;
+#             color: white;
+#             margin-bottom: 25px;">
     <h1 style="margin:0; font-size:2rem;">
-        📊 Competitive Intelligence Dashboard
+         Competitive Intelligence Dashboard
     </h1>
     <p style="margin:0.5rem 0 1rem; font-size:1rem;">
         Track, Analyze & Visualize competitor insights.
     </p>
-    <div style="font-size:1rem; font-weight:500;
-                display:flex; gap:1rem; flex-wrap:wrap;">
-        🧠 {total_competitors} Competitors 
-        &nbsp;&nbsp;•&nbsp;&nbsp;
-        📰 {total_topics} Topics 
-        &nbsp;&nbsp;•&nbsp;&nbsp;
-        🔄 Updated {last_updated}
-    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# # --------------------------------------------------------------------
-# 🌐 GLOBAL SEARCH
 # --------------------------------------------------------------------
-st.markdown("<br>", unsafe_allow_html=True)
+# 🌐 GLOBAL SEARCH (Inline input with clear icon inside)
+# --------------------------------------------------------------------
 with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
-    query = st.text_input("Search query", key="global_search_q")
 
-    # ⚡ Load cached data and search engine (cached)
-with st.spinner("🔄 Loading cached data from Milvus..."):
-    df_cache = get_cached_data()
-    if "search_engine" not in st.session_state:
-        st.session_state["search_engine"] = get_search_engine(df_cache)
-    engine = st.session_state["search_engine"]
+    # --- Custom Styling ---
+    st.markdown("""
+        <style>
+        .search-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .search-input {
+            width: 100%;
+            padding: 0.55rem 2.3rem 0.55rem 0.8rem;
+            border-radius: 8px;
+            border: 1px solid #374151;
+            background-color: #1f2937;
+            color: #f3f4f6;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .search-input::placeholder {
+            color: #9ca3af;
+        }
+        .clear-icon {
+            position: absolute;
+            right: 0.7rem;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            font-size: 1.1rem;
+            color: #d1d5db;
+            transition: 0.2s;
+            background: none;
+            border: none;
+        }
+        .clear-icon:hover {
+            color: #f9fafb;
+            transform: translateY(-50%) scale(1.1);
+        }
+        .search-btn {
+            background: linear-gradient(90deg, #6366f1, #9333ea);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.55rem 1.2rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .search-btn:hover {
+            background: linear-gradient(90deg, #818cf8, #a78bfa);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(99,102,241,0.4);
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Use session state only to persist search results
+    # --- Layout: Input + Button ---
+    col1, col2 = st.columns([7.5, 2.5])
+    with col1:
+        query_placeholder = "Type to search competitors' content..."
+        query = st.text_input(
+            "Search query",
+            value=st.session_state.get("global_search_q", ""),
+            placeholder=query_placeholder,
+            label_visibility="collapsed",
+            key="global_search_q_box",
+        )
+
+        # Inject ❌ Clear button dynamically
+        st.markdown("""
+        <script>
+        const inputBox = window.parent.document.querySelector('input[id^="global_search_q_box"]');
+        if (inputBox && !window.clearIconInjected) {
+            const clearBtn = document.createElement('button');
+            clearBtn.innerText = '✕';
+            clearBtn.className = 'clear-icon';
+            clearBtn.onclick = function() {
+                inputBox.value = '';
+                const event = new Event('input', { bubbles: true });
+                inputBox.dispatchEvent(event);
+                window.parent.postMessage({ type: 'clearSearchLogs' }, '*');
+            };
+            inputBox.parentNode.classList.add('search-wrapper');
+            inputBox.parentNode.appendChild(clearBtn);
+            window.clearIconInjected = true;
+        }
+        </script>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        search_trigger = st.button("Search", key="search_button")
+
+    # --- Load cached Milvus data once ---
+    with st.spinner("🔄 Loading cached data from Milvus..."):
+        df_cache = get_cached_data()
+        if "search_engine" not in st.session_state:
+            st.session_state["search_engine"] = get_search_engine(df_cache)
+        engine = st.session_state["search_engine"]
+
+    # --- Session states ---
     if "search_results" not in st.session_state:
         st.session_state["search_results"] = []
     if "last_query" not in st.session_state:
         st.session_state["last_query"] = ""
 
-    # 🔎 Search action
-    if st.button("Search", use_container_width=True):
+    # --- Handle Search ---
+    if search_trigger:
         q = (query or "").strip()
         if not q:
             st.warning("Please enter a search term.")
@@ -279,28 +364,24 @@ with st.spinner("🔄 Loading cached data from Milvus..."):
             st.session_state["search_results"] = results
             st.session_state["last_query"] = q
 
-    # 📊 Display results
+    # --- Display Logs within Dropdown ---
     results = st.session_state.get("search_results", [])
     q = st.session_state.get("last_query", "")
 
     if results:
-        st.subheader(f"Search Results for: _{q}_")
+        st.markdown(f"##### Results for: _{q}_")
         for meta, score in results:
             page_name = meta.get("page_name", "Untitled")
             url = meta.get("url", "#")
             chunk = meta.get("chunk_text", "")
-            short_text = chunk[:600] + ("..." if len(chunk) > 600 else "")
-
+            short_text = chunk[:400] + ("..." if len(chunk) > 400 else "")
             st.markdown(
                 f"""
                 <div style='padding:10px; border-radius:8px;
-                            background-color:#1f2937; margin-bottom:10px;'>
-                    <b>{page_name}</b><br>
-                    <a href="{url}" target="_blank"
-                       style="color:#3b82f6;">{url}</a><br>
-                    <span style="font-size:12px; color:#9ca3af;">
-                        Relevance score: {score:.3f}
-                    </span>
+                            background-color:#1e293b; margin-bottom:10px;'>
+                    <b style="color:#f9fafb;">{page_name}</b><br>
+                    <a href="{url}" target="_blank" style="color:#60a5fa;">{url}</a><br>
+                    <span style="font-size:12px; color:#9ca3af;">Relevance: {score:.3f}</span>
                     <p style='color:#d1d5db; margin-top:5px;'>{short_text}</p>
                 </div>
                 """,
@@ -309,38 +390,116 @@ with st.spinner("🔄 Loading cached data from Milvus..."):
     elif q and not results:
         st.info("No matches found.")
 
-# --------------------------------------------------------------------
-# SCRAPE ALL BUTTON
-# --------------------------------------------------------------------
-st.markdown("<br>", unsafe_allow_html=True)
-col1, col2, col3 = st.columns([4, 2, 4])
-with col2:
-    if st.button("🚀 Scrape All Competitors", use_container_width=True):
-        with st.spinner("Scraping all competitors... "
-                        "This may take several minutes ⏳"):
-            updated_df = scrape_all_sites()
-            save_cache(updated_df)
-        st.success("✅ All competitor websites have been scraped "
-                   "and updated successfully!")
 
 # --------------------------------------------------------------------
-# Ergosin Scrape BUTTON
+# SCRAPE ALL BUTTON + BASE WEBSITE SECTION (Side-by-Side)
 # --------------------------------------------------------------------
-st.subheader("Base Website – Ergosign")
-ergosign_url = "https://www.ergosign.de/en/"
+st.markdown("""
+<style>
+.scrape-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 30px;
+}
 
-col1, col2 = st.columns([8, 2])
-with col1:
-    st.markdown(
-        f"<a href='{ergosign_url}' target='_blank' style='color:#2563eb;font-weight:600;text-decoration:none;'>ergosign.en</a>",
-        unsafe_allow_html=True,
-    )
-with col2:
-    if st.button("Scrape Ergosign", key="scrape_ergosign", use_container_width=True):
-        with st.spinner("Scraping Ergosign ..."):
-            updated_df = scrape_site_with_cache(ergosign_url)
-            save_cache(updated_df)
-        st.success("✅ Ergosign updated successfully!")
+.scrape-card {
+    flex: 1;
+    background: linear-gradient(135deg, #1e3a8a, #312e81);
+    color: white;
+    border-radius: 14px;
+    padding: 1.2rem 1.4rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    text-align: center;
+    min-height: 170px;  /* reduced height */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.scrape-card h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.scrape-card p {
+    font-size: 0.95rem;
+    color: #c7d2fe;
+    margin-bottom: 1rem;
+}
+
+/* Scrape Buttons */
+.scrape-btn {
+    background: linear-gradient(90deg, #16a34a, #15803d);
+    color: white;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.scrape-btn:hover {
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    transform: translateY(-2px);
+    box-shadow: 0 3px 10px rgba(22,163,74,0.4);
+}
+
+/* Darker variant for Ergosign */
+.scrape-card.ergosign {
+    background: linear-gradient(135deg, #1e40af, #3730a3);
+}
+.scrape-card a {
+    color: #bfdbfe;
+    text-decoration: none;
+    font-weight: 500;
+}
+</style>
+
+<div class="scrape-row">
+  <!-- Left: Automated Web Scraping -->
+  <div class="scrape-card">
+    <h2>🚀 Automated Web Scraping</h2>
+    <p>Fetch and update competitor insights directly from all websites.</p>
+    <button class="scrape-btn" onclick="window.location.reload()">Scrape All Competitors</button>
+  </div>
+
+  <!-- Right: Base Website Ergosign -->
+  <div class="scrape-card ergosign">
+    <h2>🏠 Base Website – Ergosign</h2>
+    <p><a href="https://www.ergosign.de/en/" target="_blank">ergosign.de/en</a></p>
+    <button class="scrape-btn" id="ergosign_scrape">Scrape Ergosign</button>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+# # --- Python backend for Ergosign scrape ---
+# if st.button("🔄 Scrape Ergosign", key="scrape_ergosign_ui", use_container_width=False):
+#     with st.spinner("Scraping Ergosign ..."):
+#         updated_df = scrape_site_with_cache("https://www.ergosign.de/en/")
+#         save_cache(updated_df)
+#     st.success("✅ Ergosign updated successfully!")
+
+# # --------------------------------------------------------------------
+# # Ergosin Scrape BUTTON
+# # --------------------------------------------------------------------
+# st.subheader("Base Website – Ergosign")
+# ergosign_url = "https://www.ergosign.de/en/"
+
+# col1, col2 = st.columns([8, 2])
+# with col1:
+#     st.markdown(
+#         f"<a href='{ergosign_url}' target='_blank' style='color:#2563eb;font-weight:600;text-decoration:none;'>ergosign.en</a>",
+#         unsafe_allow_html=True,
+#     )
+# with col2:
+#     if st.button("Scrape Ergosign", key="scrape_ergosign", use_container_width=True):
+#         with st.spinner("Scraping Ergosign ..."):
+#             updated_df = scrape_site_with_cache(ergosign_url)
+#             save_cache(updated_df)
+#         st.success("✅ Ergosign updated successfully!")
 
 
 # --------------------------------------------------------------------
