@@ -15,6 +15,7 @@ import time
 import re
 import requests
 
+
 def _get_secret(name: str, default=None):
     """Get secret from Streamlit secrets or environment variables."""
     try:
@@ -47,8 +48,7 @@ SYSTEM_PROMPT = (
     "Each object must have exactly three fields: \"url\", \"summary\", \"topics\" (where \"topics\" is an array of strings).\n"
     "Rules:\n"
     "- Summary must be concise (2–3 sentences) and in English.\n"
-    "- Topics must be 3–6 key phrases (in English).\n"
-    "- There are no limits to the number of topics and there must be enough topics to cover all the information in the webpage.\n"
+    "- Topics must be 20 key phrases (in English).\n"
     "- Return ONLY the JSON array, nothing else.\n"
 )
 
@@ -59,7 +59,7 @@ For each text, if it is not in English, translate it into English before summari
 
 Return ONLY a valid JSON array in this exact format:
 [
-  {{"url": "...", "summary": "...", "topics": ["...", "...", "...", ...]}},
+  {{"url": "...", "summary": "...", "topics": ["...", "...", "..."]}},
   ...
 ]
 
@@ -125,12 +125,11 @@ def call_llm_batch(pages: list[dict], batch_size: int = 3) -> list[dict]:
                 text = text[:MAX_CHARS]
             text_blocks.append(f"URL: {url}\nTEXT:\n{text}\n---")
 
-        joined_blocks='\n'.join(text_blocks)
         payload = {
             "model": OLLAMA_MODEL,
             "prompt": (
                 f"<SYSTEM>\n{SYSTEM_PROMPT}\n</SYSTEM>\n\n"
-                f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text=joined_blocks)}\n</USER>"
+                f"<USER>\n{USER_PROMPT_TEMPLATE.format(pages_text='\n'.join(text_blocks))}\n</USER>"
             ),
             "options": {"temperature": TEMPERATURE},
             "stream": False,

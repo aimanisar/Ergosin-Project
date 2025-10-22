@@ -44,7 +44,7 @@ class MilvusStorage:
                     uri=f"https://{self.host}",
                     token=self.token
                 )
-                st.success(f"✅ Connected to Zilliz Cloud Milvus")
+                # st.success(f"✅ Connected to Zilliz Cloud Milvus")
             else:
                 # Local Milvus connection
                 connections.connect(
@@ -52,7 +52,7 @@ class MilvusStorage:
                     host=self.host,
                     port=self.port
                 )
-                st.success(f"✅ Connected to Milvus at {self.host}:{self.port}")
+                # st.success(f"✅ Connected to Milvus at {self.host}:{self.port}")
         except Exception as e:
             st.error(f"❌ Failed to connect to Milvus: {e}")
             if self.token:
@@ -90,7 +90,7 @@ class MilvusStorage:
             # Check if collection already exists (for Zilliz Cloud)
             if utility.has_collection(self.collection_name):
                 self.collection = Collection(self.collection_name)
-                st.info(f"📊 Using existing collection: {self.collection_name}")
+                # st.info(f"📊 Using existing collection: {self.collection_name}")
                 self.collection.load()
                 return
             
@@ -113,7 +113,7 @@ class MilvusStorage:
             # Check if collection exists
             if utility.has_collection(self.collection_name):
                 self.collection = Collection(self.collection_name)
-                st.info(f"📊 Using existing collection: {self.collection_name}")
+                # st.info(f"📊 Using existing collection: {self.collection_name}")
             else:
                 # Create collection
                 self.collection = Collection(self.collection_name, schema)
@@ -321,7 +321,7 @@ class MilvusStorage:
                 else:
                     # New URL, this is a new record
                     new_records.append(new_row)
-                    st.info(f"➕ New page found: {new_url}")
+                    # st.info(f"➕ New page found: {new_url}")
             
             if not updated_records and not new_records:
                 st.success("✅ No new or updated content found. No database changes needed.")

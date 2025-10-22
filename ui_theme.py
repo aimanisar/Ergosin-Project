@@ -109,6 +109,8 @@ def apply_theme(mode="light"):
         box-shadow: 0 1px 4px rgba(0,0,0,0.05);
         border: 1px solid {theme["border"]};
     }}
+    color_scale = "Tealgrn" if st.session_state.get("theme_mode") == "dark" else "Blues"
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -132,3 +134,27 @@ def apply_plotly_theme(fig, mode="light"):
             legend=dict(bgcolor="#ffffff", font=dict(color="#1e293b")),
         )
     return fig
+
+# === Theme-Aware Plot Colors (For Charts & Visualizations) ===
+def get_plot_theme(mode="light"):
+    """
+    Returns a color palette and layout settings for charts
+    that adapt automatically to dark or light mode.
+    """
+    if mode == "dark":
+        return {
+            "background": "#0F172A",
+            "text": "#E2E8F0",
+            "grid": "#334155",
+            "colorway": ["#3B82F6", "#8B5CF6", "#22D3EE", "#FACC15", "#10B981", "#F97316"],
+            "continuous_scale": ["#22D3EE", "#3B82F6", "#8B5CF6", "#FACC15", "#F97316"]
+        }
+    else:
+        return {
+            "background": "#FFFFFF",
+            "text": "#1E293B",
+            "grid": "#CBD5E1",
+            "colorway": ["#2563EB", "#9333EA", "#F97316", "#10B981", "#FACC15", "#3B82F6"],
+            "continuous_scale": ["#2563EB", "#9333EA", "#F97316", "#10B981", "#FACC15"]
+        }
+
