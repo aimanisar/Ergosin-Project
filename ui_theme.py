@@ -135,6 +135,7 @@ def apply_plotly_theme(fig, mode="light"):
         )
     return fig
 
+
 # === Theme-Aware Plot Colors (For Charts & Visualizations) ===
 def get_plot_theme(mode="light"):
     """

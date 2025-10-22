@@ -148,6 +148,7 @@ section h2::before {
 mode = st.sidebar.radio("🌓 Theme Mode", ["light", "dark"], horizontal=True)
 apply_theme(mode)
 
+# mode = "dark"
 # --------------------------------------------------------------------
 # COMPETITOR ROW RENDERER
 # --------------------------------------------------------------------
@@ -215,25 +216,37 @@ total_topics = (
     if not df_cache.empty else 0
 )
 
-last_updated = "recently"
+last_updated = "Unknown"
+
 if not df_cache.empty and "last_scraped" in df_cache.columns:
     try:
         last_time = pd.to_datetime(df_cache["last_scraped"]).max()
-        if last_time is not pd.NaT:
+        if pd.notna(last_time):
+            now = datetime.now(timezone.utc)
             if last_time.tzinfo is None:
                 last_time = last_time.replace(tzinfo=timezone.utc)
-            days_ago = (datetime.now(timezone.utc) - last_time).days
-            last_updated = f"{days_ago} day{'s' if days_ago != 1 else ''} ago"
-    except Exception:
-        last_updated = "recently"
 
-st.markdown(f"""
-    <div>         
+            delta = now - last_time
+            total_minutes = int(delta.total_seconds() / 60)
+            total_hours = total_minutes // 60
+
+            if total_minutes < 60:
+                last_updated = f"{total_minutes} min ago"
+            elif total_hours < 24:
+                last_updated = f"{total_hours} hr{'s' if total_hours != 1 else ''} ago"
+            else:
+                last_updated = last_time.strftime("%b %d, %Y")  # e.g. Oct 22, 2025
+    except Exception as e:
+        last_updated = "Unknown"
+
+
 # <div style="background: linear-gradient(90deg, #2563eb, #9333ea);
 #             padding: 1.5rem 2rem;
 #             border-radius: 12px;
 #             color: white;
 #             margin-bottom: 25px;">
+st.markdown(f"""
+    <div>         
     <h1 style="margin:0; font-size:2rem;">
          Competitive Intelligence Dashboard
     </h1>
@@ -391,115 +404,160 @@ with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
         st.info("No matches found.")
 
 
+# Assuming scrape_all_sites(), scrape_site_with_cache(), df_cache, SITES, and last_updated are defined.
+
+
 # --------------------------------------------------------------------
-# SCRAPE ALL BUTTON + BASE WEBSITE SECTION (Side-by-Side)
+# 📊 Scrape Section – Unified 3 Card Row (Blue–Purple–Teal Theme)
+# --------------------------------------------------------------------
+if not df_cache.empty and "last_scraped" in df_cache.columns:
+    try:
+        last_time = pd.to_datetime(df_cache["last_scraped"]).max()
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        diff = now - last_time
+        mins_ago = diff.total_seconds() / 60
+        hours_ago = mins_ago / 60
+        if mins_ago < 60:
+            last_updated = f"{int(mins_ago)} mins ago"
+        elif hours_ago < 24:
+            last_updated = f"{int(hours_ago)} hrs ago"
+        else:
+            last_updated = last_time.strftime("%d %b %Y")
+    except Exception:
+        last_updated = "Recently"
+else:
+    last_updated = "Recently"
+
+sites_scraped = len(df_cache["website"].unique()) if not df_cache.empty else len(SITES)
+
+# --------------------------------------------------------------------
+# 🎨 Styling – Teal / Blue / Purple Gradient Theme
 # --------------------------------------------------------------------
 st.markdown("""
 <style>
-.scrape-row {
+.scrape-section {
     display: flex;
+    flex-wrap: nowrap;
     justify-content: space-between;
-    gap: 1.5rem;
-    margin-bottom: 30px;
+    align-items: stretch;
+    gap: 1.2rem;
+    margin-bottom: 25px;
 }
 
-.scrape-card {
-    flex: 1;
-    background: linear-gradient(135deg, #1e3a8a, #312e81);
-    color: white;
+/* Gradient cards (Scrape All / Ergosign) */
+.scrape-box {
+    flex: 1 1 32%;
+    background: linear-gradient(145deg, #1e3a8a, #312e81, #0d9488);
+    border: 1px solid rgba(147,197,253,0.3);
     border-radius: 14px;
-    padding: 1.2rem 1.4rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    padding: 1.5rem;
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
+    color: #f1f5f9;
     text-align: center;
-    min-height: 170px;  /* reduced height */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+    min-height: 230px;
+}
+.scrape-box:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0 25px rgba(56,189,248,0.4);
+}
+
+/* Metric card */
+.metric-box {
+    flex: 1 1 32%;
+    background: linear-gradient(145deg, #0f172a, #1e293b, #164e63);
+    border: 1px solid rgba(56,189,248,0.3);
+    border-radius: 14px;
+    padding: 1.5rem;
+    color: #e5e7eb;
+    text-align: center;
+    box-shadow: 0 0 15px rgba(0,0,0,0.25);
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
+}
+.metric-box h2 {
+    color: #7dd3fc;
+    margin: 0.3rem 0;
+    font-size: 2rem;
+}
+.metric-box small {
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 0.4rem;
 }
 
-.scrape-card h2 {
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-}
-
-.scrape-card p {
-    font-size: 0.95rem;
-    color: #c7d2fe;
-    margin-bottom: 1rem;
-}
-
-/* Scrape Buttons */
-.scrape-btn {
-    background: linear-gradient(90deg, #16a34a, #15803d);
+/* Buttons inside cards */
+.stButton>button {
+    background: linear-gradient(90deg, #0ea5e9, #8b5cf6);
     color: white;
-    font-weight: 600;
     border: none;
     border-radius: 8px;
-    padding: 0.6rem 1.5rem;
-    font-size: 1rem;
+    padding: 0.6rem 1.4rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    width: 80%;
 }
-.scrape-btn:hover {
-    background: linear-gradient(90deg, #22c55e, #16a34a);
+.stButton>button:hover {
+    background: linear-gradient(90deg, #06b6d4, #a855f7);
     transform: translateY(-2px);
-    box-shadow: 0 3px 10px rgba(22,163,74,0.4);
 }
-
-/* Darker variant for Ergosign */
-.scrape-card.ergosign {
-    background: linear-gradient(135deg, #1e40af, #3730a3);
+.scrape-box h3 {
+    color: #f9fafb;
+    margin-bottom: 0.3rem;
 }
-.scrape-card a {
-    color: #bfdbfe;
-    text-decoration: none;
-    font-weight: 500;
+.scrape-box p {
+    color: #d1d5db;
+    font-size: 0.9rem;
 }
 </style>
-
-<div class="scrape-row">
-  <!-- Left: Automated Web Scraping -->
-  <div class="scrape-card">
-    <h2>🚀 Automated Web Scraping</h2>
-    <p>Fetch and update competitor insights directly from all websites.</p>
-    <button class="scrape-btn" onclick="window.location.reload()">Scrape All Competitors</button>
-  </div>
-
-  <!-- Right: Base Website Ergosign -->
-  <div class="scrape-card ergosign">
-    <h2>🏠 Base Website – Ergosign</h2>
-    <p><a href="https://www.ergosign.de/en/" target="_blank">ergosign.de/en</a></p>
-    <button class="scrape-btn" id="ergosign_scrape">Scrape Ergosign</button>
-  </div>
-</div>
 """, unsafe_allow_html=True)
 
-# # --- Python backend for Ergosign scrape ---
-# if st.button("🔄 Scrape Ergosign", key="scrape_ergosign_ui", use_container_width=False):
-#     with st.spinner("Scraping Ergosign ..."):
-#         updated_df = scrape_site_with_cache("https://www.ergosign.de/en/")
-#         save_cache(updated_df)
-#     st.success("✅ Ergosign updated successfully!")
+# --------------------------------------------------------------------
+# 🧩 Layout – Three Side-by-Side Cards
+# --------------------------------------------------------------------
+col1, col2, col3 = st.columns(3)
 
-# # --------------------------------------------------------------------
-# # Ergosin Scrape BUTTON
-# # --------------------------------------------------------------------
-# st.subheader("Base Website – Ergosign")
-# ergosign_url = "https://www.ergosign.de/en/"
+# --- Card 1: Scrape All Competitors ---
+with col1:
+    st.markdown('<div>', unsafe_allow_html=True)
+    st.markdown("### 🚀 Automated Web Scraping")
+    st.markdown("Fetch and update competitor insights from all tracked sites.")
+    if st.button("Scrape All Competitors", key="scrape_all_v3"):
+        with st.spinner("Scraping all competitor websites..."):
+            scrape_all_sites()
+        st.success("✅ All competitors scraped successfully!")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# col1, col2 = st.columns([8, 2])
-# with col1:
-#     st.markdown(
-#         f"<a href='{ergosign_url}' target='_blank' style='color:#2563eb;font-weight:600;text-decoration:none;'>ergosign.en</a>",
-#         unsafe_allow_html=True,
-#     )
-# with col2:
-#     if st.button("Scrape Ergosign", key="scrape_ergosign", use_container_width=True):
-#         with st.spinner("Scraping Ergosign ..."):
-#             updated_df = scrape_site_with_cache(ergosign_url)
-#             save_cache(updated_df)
-#         st.success("✅ Ergosign updated successfully!")
+# --- Card 2: Scrape Ergosign ---
+with col2:
+    st.markdown('<div >', unsafe_allow_html=True)
+    st.markdown("### 🏠 Your Website – Ergosign")
+    st.markdown('<p><a href="https://www.ergosign.de/en/" target="_blank" style="color:#bfdbfe;">ergosign.de/en</a></p>', unsafe_allow_html=True)
+    if st.button("Scrape Ergosign", key="scrape_ergosign_v3"):
+        with st.spinner("Scraping Ergosign website..."):
+            scrape_site_with_cache("https://www.ergosign.de/en/")
+        st.success("✅ Ergosign updated successfully!")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Card 3: Metrics ---
+with col3:
+    st.markdown(f"""
+    <div class="metric-box">
+        <h2>{sites_scraped}</h2>
+        <small>Sites Scraped</small>
+        <h2 style="font-size:1.4rem;">{last_updated}</h2>
+        <small>Last Scrape</small>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------

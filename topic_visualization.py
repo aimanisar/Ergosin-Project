@@ -891,131 +891,195 @@ class TopicVisualizer:
             st.metric("Base vs Competitor Pages", f"{base_pages} : {competitor_pages}")
     
     # @st.cache_data(show_spinner=False, hash_funcs={list: lambda _: None})
+
+    # ---- Cached helper for data preparation ----
+    @st.cache_data(show_spinner=False)
+    def _prepare_treemap_data(_self, website_topics):
+        """Cached data preprocessing only (safe for caching)."""
+        all_records = []
+        for site, topics in website_topics.items():
+            # Flatten any nested lists or tuples
+            flat_topics = []
+            for t in topics:
+                if isinstance(t, (list, tuple)):
+                    flat_topics.extend([str(x).strip() for x in t])
+                else:
+                    flat_topics.append(str(t).strip())
+            for topic in flat_topics:
+                if topic:
+                    all_records.append({"Website": site, "Topic": topic})
+
+        if not all_records:
+            return pd.DataFrame(columns=["Website", "Topic", "Mentions"])
+
+        df = pd.DataFrame(all_records)
+        return df.groupby(["Website", "Topic"]).size().reset_index(name="Mentions")
+
     def _create_competitor_topic_treemap(self, website_topics, competitor_type="default"):
-                """Treemap visualization for topic distribution across competitors."""
+        """Treemap visualization for topic distribution with dynamic filters (dropdown + slider)."""
 
-                # Flatten data
-                all_records = []
-                for site, topics in website_topics.items():
-                    if site not in self.base_data["website"].unique():  # exclude base Ergonsign
-                        for topic in topics:
-                            all_records.append({"Website": site, "Topic": topic})
+        # --- Prepare data ---
+        all_records = []
+        for site, topics in website_topics.items():
+            for topic in topics:
+                all_records.append({"Website": site, "Topic": topic})
 
-                if not all_records:
-                    st.info(f"No topics available for {competitor_type} competitors.")
-                    return
+        if not all_records:
+            st.info(f"No topics available for {competitor_type} competitors.")
+            return
 
-                df = pd.DataFrame(all_records)
-                topic_stats = df.groupby(["Website", "Topic"]).size().reset_index(name="Mentions")
+        topic_stats = (
+            pd.DataFrame(all_records)
+            .groupby(["Website", "Topic"])
+            .size()
+            .reset_index(name="Mentions")
+        )
 
-                # Treemap chart
-                fig = px.treemap(
-                    topic_stats,
-                    path=["Website", "Topic"],
-                    values="Mentions",
-                    color="Mentions",
-                    color_continuous_scale="Blues",
-                    title=f"🧭 Topic Distribution Treemap — {competitor_type.capitalize()} Competitors",
-                )
+        # --- Layout: Title + Filters in One Row ---
+        st.markdown("### 🧭 Treemap of Topic Distribution")
 
-                fig.update_traces(
-                    hovertemplate="<b>%{label}</b><br>Mentions: %{value}<extra></extra>"
-                )
-                fig.update_layout(height=650, margin=dict(t=50, l=25, r=25, b=25))
-                st.plotly_chart(fig, use_container_width=True)
+        col1, col2, col3, col4 = st.columns([1, 2, 2, 1])  # balanced center layout
+        with col2:
+            competitors = sorted(topic_stats["Website"].unique())
+            selected_competitors = st.multiselect(
+                "Select Competitors",
+                options=competitors,
+                default=[competitors[0]] if competitors else [],
+                key=f"treemap_filter_{competitor_type}"
+            )
+        with col3:
+            top_n = st.slider(
+                "Top N Topics",
+                min_value=5,
+                max_value=30,
+                value=10,
+                step=1,
+                key=f"treemap_topn_{competitor_type}"
+            )
 
-@st.cache_data(
-    show_spinner=False,
-    hash_funcs={
-        list: lambda _: None,
-        dict: lambda _: None,
-        pd.DataFrame: lambda _: None
-    }
-)
+        # --- Reactive filtering ---
+        if not selected_competitors:
+            st.warning("Please select at least one competitor.")
+            return
+
+        filtered_df = topic_stats[topic_stats["Website"].isin(selected_competitors)]
+        top_topics = (
+            filtered_df.groupby("Topic")["Mentions"]
+            .sum()
+            .nlargest(top_n)
+            .index
+        )
+        filtered_df = filtered_df[filtered_df["Topic"].isin(top_topics)]
+
+        # --- Treemap Visualization ---
+        fig = px.treemap(
+            filtered_df,
+            path=["Website", "Topic"],
+            values="Mentions",
+            color="Mentions",
+            color_continuous_scale="Blues",
+            title=f"🧩 Topic Distribution — {competitor_type.capitalize()} Competitors"
+        )
+
+        fig.update_layout(
+            height=600,
+            margin=dict(t=50, l=25, r=25, b=25),
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a",
+            font=dict(color="#f1f5f9")
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+
+
 def show_topic_visualization(df=None, competitor_type=None, mode="light"):
 
-    """Main function to display topic visualizations with filtering for competitor groups"""
-    
-    ## Dynamic header
-    if competitor_type == "close":
-        st.header("📊 Topic Analysis – Close Competitors")
-    elif competitor_type == "international":
-        st.header("📊 Topic Analysis – International Competitors")
-    else:
-        st.header("📊 Topic Analysis & Comparison")
-
-    visualizer = TopicVisualizer()
-
-    # Load filtered data
-    if not visualizer.load_data(df=df, filter_type=competitor_type):
-        return True
-
-    # Display metrics
-    visualizer.display_metrics()
-    st.markdown("---")
-
-    # Create tabs for different analysis views
-    tabs = st.tabs([
-        "📊 Competitive Analysis",
-        # "📈 Website Metrics",
-        "📊 Simple Topic Comparison",
-        # "📉 Topic Trends",
-        "🎯 Priority Matrix",
-        # "⏳ Trend Timeline",
-        # "🧭 Strategic Analysis"
-    ])
-
-    with tabs[0]:
-        st.subheader("Treemap of Topic Distribution")
-
-        if not visualizer.competitor_data.empty:
-            # Flatten topic lists safely
-            website_topics = {}
-            for site, rows in visualizer.competitor_data.groupby("website"):
-                all_topics = []
-                for t in rows["topics"]:
-                    if isinstance(t, list):
-                        all_topics.extend(t)
-                    elif isinstance(t, str) and t.strip():
-                        all_topics.extend([s.strip() for s in t.split(",")])
-                website_topics[site] = all_topics
-
-            visualizer._create_competitor_topic_treemap(
-                website_topics,
-                competitor_type=competitor_type
-            )
+        """Main function to display topic visualizations with filtering for competitor groups"""
+        
+        ## Dynamic header
+        if competitor_type == "close":
+            st.header("📊 Topic Analysis – Close Competitors")
+        elif competitor_type == "international":
+            st.header("📊 Topic Analysis – International Competitors")
         else:
-            st.info("No competitor data available for treemap.")
-   
+            st.header("📊 Topic Analysis & Comparison")
 
-    with tabs[1]:
-        st.subheader("Simple Topic Comparison")
-        visualizer.create_simple_topic_comparison(competitor_type=competitor_type)
+        visualizer = TopicVisualizer()
 
+        # Load filtered data
+        if not visualizer.load_data(df=df, filter_type=competitor_type):
+            return True
 
-    with tabs[2]:
-        st.subheader("Priority Bubble Matrix")
-        visualizer.create_priority_bubble_chart(competitor_type=competitor_type)
-
-
-    st.markdown("---")
-    
-    # Simple insights section
-    st.subheader("Summary")
-    
-    if not visualizer.base_data.empty and not visualizer.competitor_data.empty:
-        base_topics = visualizer.extract_topics(visualizer.base_data)
-        competitor_topics = visualizer.extract_topics(visualizer.competitor_data)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Your Topics", len(base_topics))
-        with col2:
-            st.metric("Competitor Topics", len(competitor_topics))
-        with col3:
-            common_topics = set(base_topics.keys()) & set(competitor_topics.keys())
-            st.metric("Common Topics", len(common_topics))
-        
+        # Display metrics
+        visualizer.display_metrics()
         st.markdown("---")
+
+        # Create tabs for different analysis views
+        tabs = st.tabs([
+            "📊 Competitive Analysis",
+            # "📈 Website Metrics",
+            "📊 Simple Topic Comparison",
+            # "📉 Topic Trends",
+            "🎯 Priority Matrix",
+            # "⏳ Trend Timeline",
+            # "🧭 Strategic Analysis"
+        ])
+
+        with tabs[0]:
+            st.subheader("Treemap of Topic Distribution")
+
+            if not visualizer.competitor_data.empty:
+                # Flatten topic lists safely
+                website_topics = {}
+                for site, rows in visualizer.competitor_data.groupby("website"):
+                    all_topics = []
+                    for t in rows["topics"]:
+                        if isinstance(t, list):
+                            all_topics.extend(t)
+                        elif isinstance(t, str) and t.strip():
+                            all_topics.extend([s.strip() for s in t.split(",")])
+                    website_topics[site] = all_topics
+
+                visualizer._create_competitor_topic_treemap(
+                    website_topics,
+                    competitor_type=competitor_type
+                )
+            else:
+                st.info("No competitor data available for treemap.")
+    
+
+        with tabs[1]:
+            st.subheader("Simple Topic Comparison")
+            visualizer.create_simple_topic_comparison(competitor_type=competitor_type)
+
+
+        with tabs[2]:
+            st.subheader("Priority Bubble Matrix")
+            visualizer.create_priority_bubble_chart(competitor_type=competitor_type)
+
+
+        st.markdown("---")
+        
+        # Simple insights section
+        st.subheader("Summary")
+        
+        if not visualizer.base_data.empty and not visualizer.competitor_data.empty:
+            base_topics = visualizer.extract_topics(visualizer.base_data)
+            competitor_topics = visualizer.extract_topics(visualizer.competitor_data)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Your Topics", len(base_topics))
+            with col2:
+                st.metric("Competitor Topics", len(competitor_topics))
+            with col3:
+                common_topics = set(base_topics.keys()) & set(competitor_topics.keys())
+                st.metric("Common Topics", len(common_topics))
+            
+            st.markdown("---")
 
 
