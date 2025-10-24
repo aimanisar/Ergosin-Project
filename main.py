@@ -139,16 +139,115 @@ div.stButton > button:hover {
 
 /* ===== Section Headers / Icons ===== */
 section h2::before {
-    content: "📊 ";
+    content: "";
     font-size: 1.3rem;
 }
 </style>
 """, unsafe_allow_html=True)
 
-mode = st.sidebar.radio("🌓 Theme Mode", ["light", "dark"], horizontal=True)
-apply_theme(mode)
+# Apply uniform gradient card styling to specific containers so content renders inside
+## Removed earlier per-user CSS block to simplify and unify styling
 
-# mode = "dark"
+# Set dark mode as default
+mode = "dark"
+apply_theme(mode)
+# --------------------------------------------------------------------
+# Rounded card styling for the three scrape/metric boxes (dark mode)
+# --------------------------------------------------------------------
+card_bg = "#1e293b"
+card_border = "#334155"
+card_text = "#e2e8f0"
+
+st.markdown(
+    """
+    <style>
+    /* Unified card style for two boxes with gradient border */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"],
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] {
+        background: linear-gradient(145deg, #0f172a, #1e293b, #164e63) padding-box,
+                    linear-gradient(90deg, #1e3a8a, #312e81, #164e63, #0d9488) border-box;
+        border: 3px solid transparent;
+        border-radius: 16px;
+        padding: 2rem;
+        min-height: 240px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1.5rem;
+        box-shadow: 0 10px 26px rgba(0,0,0,0.20);
+        color: #e5e7eb;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        transition: all .2s ease;
+        will-change: transform;
+        margin-bottom: 1rem;
+    }
+
+
+    /* Ensure Streamlit's inner bordered wrapper also has equal height */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"] > div:first-child,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] > div:first-child {
+        min-height: 100%;                  /* equal inner height */
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        background: transparent;
+    }
+
+    /* Subtle hover lift and glow */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"]:hover,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"]:hover {
+        transform: translateY(-2px);
+        background: linear-gradient(145deg, #0f172a, #1e293b, #164e63) padding-box,
+                    linear-gradient(90deg, #3b82f6, #8b5cf6, #22d3ee, #14b8a6) border-box;
+        box-shadow: 0 14px 34px rgba(56,189,248,0.25), 0 8px 20px rgba(0,0,0,0.25);
+    }
+
+    /* Headings and text inside cards */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"] h3,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] h3 {
+        margin: 0 0 10px 0;
+        color: #e5e7eb;
+        font-size: 1.5rem;
+        font-weight: 600;
+        line-height: 1.4;
+        text-align: center;
+    }
+    /* Paragraph and links inside cards */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"] p,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] p,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] a {
+        color: #cbd5e1;
+        margin: 0 0 14px 0;
+        font-size: 1.1rem;
+        line-height: 1.5;
+        text-align: center;
+    }
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] a:hover {
+        color: #e2e8f0;
+        text-decoration: underline;
+    }
+    
+    /* Ensure markdown paragraphs are center aligned */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"] .stMarkdown,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] .stMarkdown {
+        text-align: center;
+    }
+
+    /* Button styling */
+    div[data-testid="stVerticalBlock"][data-key="card_scrape_all"] .stButton>button,
+    div[data-testid="stVerticalBlock"][data-key="card_ergosign"] .stButton>button {
+        width: 100%;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 # --------------------------------------------------------------------
 # COMPETITOR ROW RENDERER
 # --------------------------------------------------------------------
@@ -159,6 +258,7 @@ def render_competitor_controls(sites, group_name):
 
     st.markdown("""
         <style>
+        /* Scrape button styling */
         div.stButton > button {
             border-radius: 6px;
             font-weight: 600;
@@ -174,27 +274,155 @@ def render_competitor_controls(sites, group_name):
             transform: translateY(-1px);
             box-shadow: 0 2px 6px rgba(22, 163, 74, 0.4);
         }
+        
+        /* Gradient separator line */
+        .gradient-separator {
+            height: 3px;
+            background: linear-gradient(90deg, #1e3a8a, #312e81, #164e63, #0d9488);
+            margin: 1rem 0;
+            border-radius: 2px;
+            opacity: 0.7;
+            width: 85%;  /* Shortened to end before button */
+        }
+        
+        /* Competitor name spacing */
+        .competitor-name {
+            padding: 0.75rem 0;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    for i, site in enumerate(sites):
-        name = site.get("name") or site["url"].split("//")[-1].split("/")[0]
-        url = site["url"]
-
-        col1, col2 = st.columns([8, 2], gap="medium")
-        with col1:
+    # Create 3-column layout: Treemap | Competitor List | Buttons
+    col_treemap, col_list, col_buttons = st.columns([4, 2, 1], gap="small")
+    
+    with col_treemap:
+        st.markdown("### 📊 Topic Distribution")
+        
+        try:
+            # Get cached data
+            df_cache = load_cache()
+            if not df_cache.empty:
+                # Import the treemap function from topic_visualization
+                from topic_visualization import TopicVisualizer
+                
+                # Create visualizer instance
+                visualizer = TopicVisualizer()
+                visualizer.df = df_cache
+                visualizer.competitor_data = df_cache
+                
+                # Add controls
+                st.markdown("**Select Competitors:**")
+                competitor_options = df_cache['website'].unique().tolist()
+                selected_competitors = st.multiselect(
+                    "Choose competitors:",
+                    competitor_options,
+                    default=competitor_options[:3] if len(competitor_options) > 3 else competitor_options,
+                    key=f"sidebar_treemap_competitors_{group_name}"
+                )
+                
+                st.markdown("**Top N Topics:**")
+                top_n = st.slider("Number of topics:", 5, 20, 10, key=f"sidebar_treemap_top_n_{group_name}")
+                
+                if selected_competitors and len(selected_competitors) > 0:
+                    # Filter data for selected competitors
+                    filtered_df = df_cache[df_cache['website'].isin(selected_competitors)]
+                    
+                    if not filtered_df.empty:
+                        # Prepare website topics data properly
+                        website_topics = {}
+                        for site in selected_competitors:
+                            site_data = filtered_df[filtered_df['website'] == site]
+                            topics_list = []
+                            for topics_entry in site_data['topics'].dropna():
+                                if isinstance(topics_entry, list):
+                                    topics_list.extend([str(t).strip() for t in topics_entry if t and str(t).strip()])
+                                elif isinstance(topics_entry, str) and topics_entry.strip() and topics_entry != '[]':
+                                    try:
+                                        import ast
+                                        parsed = ast.literal_eval(topics_entry)
+                                        if isinstance(parsed, list):
+                                            topics_list.extend([str(t).strip() for t in parsed if t and str(t).strip()])
+                                        else:
+                                            topics_list.append(topics_entry.strip())
+                                    except:
+                                        topics_list.append(topics_entry.strip())
+                            website_topics[site] = topics_list
+                        
+                        # Create a simple treemap without using the main visualization function
+                        import plotly.express as px
+                        import pandas as pd
+                        
+                        # Prepare data for simple treemap
+                        all_topics = []
+                        for site, topics in website_topics.items():
+                            all_topics.extend(topics)
+                        
+                        if all_topics:
+                            # Count topic frequencies
+                            topic_counts = pd.Series(all_topics).value_counts().head(top_n)
+                            
+                            # Create simple treemap
+                            fig = px.treemap(
+                                values=topic_counts.values,
+                                names=topic_counts.index,
+                                title=f"Topic Distribution - {group_name}",
+                                color_continuous_scale="Blues"
+                            )
+                            fig.update_layout(
+                                height=400,
+                                title_font_size=16,
+                                font_size=12
+                            )
+                            st.plotly_chart(fig, width='stretch', height=400)
+                        else:
+                            st.info("No topics found for selected competitors")
+                    else:
+                        st.info("No data for selected competitors")
+                else:
+                    st.info("Please select at least one competitor")
+            else:
+                st.info("No data available - scrape some competitors first")
+        except Exception as e:
+            st.error(f"Treemap error: {str(e)}")
+            st.info("Please check if data is properly loaded and try again")
+    
+    with col_list:
+        st.markdown("### Competitors")
+        for i, site in enumerate(sites):
+            name = site.get("name") or site["url"].split("//")[-1].split("/")[0]
+            url = site["url"]
+            
             st.markdown(
-                f"🌐 <a href='{url}' target='_blank' "
+                f"<div class='competitor-name'>"
+                f"<a href='{url}' target='_blank' "
                 f"style='color:#60a5fa; font-weight:600; "
-                f"text-decoration:none; font-size:1.05rem;'>{name}</a>",
+                f"text-decoration:none; font-size:1.25rem;'>{name}</a>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
-        with col2:
+            
+            # Add gradient separator after each item (except the last one)
+            if i < len(sites) - 1:
+                st.markdown("<div class='gradient-separator'></div>", unsafe_allow_html=True)
+    
+    with col_buttons:
+        st.markdown("### Actions")
+        for i, site in enumerate(sites):
+            name = site.get("name") or site["url"].split("//")[-1].split("/")[0]
+            url = site["url"]
+            
+            # Add spacing to align with competitor names
+            st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
+            
             if st.button("Scrape", key=f"scrape_{group_name}_{i}"):
                 with st.spinner(f"Scraping {name} ({url})..."):
                     updated_df = scrape_site_with_cache(url)
                     save_cache(updated_df)
-                st.success(f"✅ Done scraping {name}")
+                st.success(f"Done scraping {name}")
+            
+            # Add spacing after button to match competitor spacing
+            if i < len(sites) - 1:
+                st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
 # HEADER WITH METRICS
@@ -240,25 +468,50 @@ if not df_cache.empty and "last_scraped" in df_cache.columns:
         last_updated = "Unknown"
 
 
-# <div style="background: linear-gradient(90deg, #2563eb, #9333ea);
-#             padding: 1.5rem 2rem;
-#             border-radius: 12px;
-#             color: white;
-#             margin-bottom: 25px;">
-st.markdown(f"""
-    <div>         
-    <h1 style="margin:0; font-size:2rem;">
-         Competitive Intelligence Dashboard
-    </h1>
-    <p style="margin:0.5rem 0 1rem; font-size:1rem;">
+st.markdown("""
+<div style="background: linear-gradient(90deg, #2563eb, #9333ea);
+            padding: 1.5rem 2rem;
+            border-radius: 12px;
+            color: white;
+            margin-bottom: 25px;
+            text-align: center;">
+    <h1 style="margin:0; font-size:2.5rem;">📊 Competitive Intelligence Dashboard</h1>
+    <p style="margin:0.5rem 0 0; font-size:1.2rem;">
         Track, Analyze & Visualize competitor insights.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
-# 🌐 GLOBAL SEARCH (Inline input with clear icon inside)
+# GLOBAL SEARCH (Inline input with clear icon inside)
 # --------------------------------------------------------------------
+# Add CSS for expander styling
+st.markdown("""
+    <style>
+    /* Global Search Expander Styling */
+    div[data-testid="stExpander"] details summary {
+        font-size: 1.9rem !important;
+        font-weight: 600 !important;
+        padding: 1.3rem 1.5rem !important;
+        color: #60a5fa !important;
+        background: linear-gradient(135deg, #1e3a8a15, #312e8115) !important;
+        border: 2px solid rgba(56,189,248,0.3) !important;
+        border-radius: 10px !important;
+        transition: all 0.2s ease !important;
+    }
+    div[data-testid="stExpander"] details summary:hover {
+        background: linear-gradient(135deg, #1e3a8a25, #312e8125) !important;
+        border-color: rgba(56,189,248,0.5) !important;
+        transform: translateY(-1px);
+    }
+    div[data-testid="stExpander"] details[open] summary {
+        border-bottom-left-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        background: linear-gradient(135deg, #1e3a8a30, #312e8130) !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
 
     # --- Custom Styling ---
@@ -270,16 +523,17 @@ with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
         }
         .search-input {
             width: 100%;
-            padding: 0.55rem 2.3rem 0.55rem 0.8rem;
+            padding: 0.8rem 2.5rem 0.8rem 1rem;
             border-radius: 8px;
             border: 1px solid #374151;
             background-color: #1f2937;
             color: #f3f4f6;
-            font-size: 0.95rem;
+            font-size: 1.1rem;
             outline: none;
         }
         .search-input::placeholder {
             color: #9ca3af;
+            font-size: 1.05rem;
         }
         .clear-icon {
             position: absolute;
@@ -302,9 +556,9 @@ with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 0.55rem 1.2rem;
+            padding: 0.8rem 1.5rem;
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 1.05rem;
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -408,7 +662,7 @@ with st.expander("🔍 Global Search Across Scraped Content", expanded=False):
 
 
 # --------------------------------------------------------------------
-# 📊 Scrape Section – Unified 3 Card Row (Blue–Purple–Teal Theme)
+# Scrape Section – Unified 3 Card Row (Blue–Purple–Teal Theme)
 # --------------------------------------------------------------------
 if not df_cache.empty and "last_scraped" in df_cache.columns:
     try:
@@ -482,6 +736,8 @@ st.markdown("""
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    min-height: 180px;
+    overflow: hidden;
 }
 .metric-box h2 {
     color: #7dd3fc;
@@ -522,69 +778,218 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
-# 🧩 Layout – Three Side-by-Side Cards
+# 🧩 Layout – Main Content (Left) + Two Vertical Cards (Right)
 # --------------------------------------------------------------------
-col1, col2, col3 = st.columns(3)
+# Create main layout with left content and right sidebar
+main_col, cards_col = st.columns([7, 3], gap="medium")
 
-# --- Card 1: Scrape All Competitors ---
-with col1:
-    st.markdown('<div>', unsafe_allow_html=True)
-    st.markdown("### 🚀 Automated Web Scraping")
-    st.markdown("Fetch and update competitor insights from all tracked sites.")
-    if st.button("Scrape All Competitors", key="scrape_all_v3"):
-        with st.spinner("Scraping all competitor websites..."):
-            scrape_all_sites()
-        st.success("✅ All competitors scraped successfully!")
-    st.markdown("</div>", unsafe_allow_html=True)
+# Right column - Two vertical cards
+with cards_col:
+    # Add spacing to align cards with competitor list (after global search)
+    st.markdown('<div style="margin-top: 8rem;"></div>', unsafe_allow_html=True)
+    
+    # --- Card 1: Scrape All Competitors ---
+    try:
+        container_scrape_all = st.container(border=True, key="card_scrape_all")
+    except TypeError:
+        container_scrape_all = st.container(key="card_scrape_all")
+    with container_scrape_all:
+        st.markdown("<h3 style='text-align: center;'>Web Scraping</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 1.1rem; text-align: center;'>Fetch and update competitor insights from all tracked sites.</p>", unsafe_allow_html=True)
+        # Center button using columns
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("Scrape All Competitors", key="scrape_all_v3", width='stretch'):
+                with st.spinner("Scraping all competitor websites..."):
+                    scrape_all_sites()
+                st.success("All competitors scraped successfully!")
 
-# --- Card 2: Scrape Ergosign ---
-with col2:
-    st.markdown('<div >', unsafe_allow_html=True)
-    st.markdown("### 🏠 Your Website – Ergosign")
-    st.markdown('<p><a href="https://www.ergosign.de/en/" target="_blank" style="color:#bfdbfe;">ergosign.de/en</a></p>', unsafe_allow_html=True)
-    if st.button("Scrape Ergosign", key="scrape_ergosign_v3"):
-        with st.spinner("Scraping Ergosign website..."):
-            scrape_site_with_cache("https://www.ergosign.de/en/")
-        st.success("✅ Ergosign updated successfully!")
-    st.markdown("</div>", unsafe_allow_html=True)
+    # --- Card 2: Scrape Ergosign ---
+    try:
+        container_ergosign = st.container(border=True, key="card_ergosign")
+    except TypeError:
+        container_ergosign = st.container(key="card_ergosign")
+    with container_ergosign:
+        st.markdown("<h3 style='text-align: center;'>Ergosign Website</h3>", unsafe_allow_html=True)
+        st.markdown('<p style="text-align: center;"><a href="https://www.ergosign.de/en/" target="_blank" style="color:#bfdbfe; font-size: 1.1rem;">ergosign.de/en</a></p>', unsafe_allow_html=True)
+        # Center button using columns
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("Scrape Ergosign", key="scrape_ergosign_v3", width='stretch'):
+                with st.spinner("Scraping Ergosign website..."):
+                    scrape_site_with_cache("https://www.ergosign.de/en/")
 
-# --- Card 3: Metrics ---
-with col3:
-    st.markdown(f"""
-    <div class="metric-box">
-        <h2>{sites_scraped}</h2>
-        <small>Sites Scraped</small>
-        <h2 style="font-size:1.4rem;">{last_updated}</h2>
-        <small>Last Scrape</small>
-    </div>
+
+# Left column - Main content area
+with main_col:
+    # --------------------------------------------------------------------
+    # SIDEBAR & MAIN CONTENT
+    # --------------------------------------------------------------------
+    # Enhanced sidebar styling with perfect alignment
+    st.sidebar.markdown("""
+        <style>
+        /* Sidebar base */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+        }
+        [data-testid="stSidebar"] > div {
+            padding: 1.5rem 1rem !important;
+        }
+        
+        /* Headers - perfectly centered */
+        [data-testid="stSidebar"] h2 {
+            color: #60a5fa !important;
+            font-weight: 600 !important;
+            font-size: 1.8rem !important;
+            text-align: center !important;
+            margin: 1rem 0 1.5rem 0 !important;
+            padding: 0 !important;
+        }
+        [data-testid="stSidebar"] h3 {
+            color: #60a5fa !important;
+            font-weight: 600 !important;
+            font-size: 1.3rem !important;
+            text-align: center !important;
+            margin: 1.5rem 0 1rem 0 !important;
+            padding: 0 !important;
+            line-height: 1.4 !important;
+        }
+        
+        /* Radio buttons section */
+        [data-testid="stSidebar"] label[data-baseweb="radio"] {
+            font-size: 1.1rem !important;
+            color: #e2e8f0 !important;
+            font-weight: 500 !important;
+        }
+        [data-testid="stSidebar"] [role="radiogroup"] {
+            gap: 1rem !important;
+            margin: 1rem 0 !important;
+        }
+        
+        /* Metrics - centered with boxes */
+        [data-testid="stSidebar"] [data-testid="stMetric"] {
+            background: rgba(15, 23, 42, 0.6) !important;
+            padding: 1.2rem 0.8rem !important;
+            border-radius: 10px !important;
+            margin: 0.8rem 0 !important;
+            text-align: center !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+            font-size: 1.05rem !important;
+            color: #94a3b8 !important;
+            text-align: center !important;
+            width: 100% !important;
+            display: block !important;
+            margin-bottom: 0.6rem !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricLabel"] > div {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+            font-size: 2.4rem !important;
+            color: #60a5fa !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            width: 100% !important;
+            display: block !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricValue"] > div {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        
+        /* Info boxes */
+        [data-testid="stSidebar"] .stAlert {
+            text-align: center !important;
+            font-size: 1.15rem !important;
+            padding: 0.8rem 1rem !important;
+            margin: 1rem 0 !important;
+        }
+        
+        /* Dividers */
+        [data-testid="stSidebar"] hr {
+            margin: 2rem 0 !important;
+            border: none !important;
+            border-top: 2px solid rgba(96, 165, 250, 0.25) !important;
+        }
+        </style>
     """, unsafe_allow_html=True)
+    
+    st.sidebar.markdown('<h2 style="text-align: center; margin: 1.5rem 0;">Competitor View</h2>', unsafe_allow_html=True)
+    
+    view_option = st.sidebar.radio(
+        "Select Competitor Group:",
+        ("Close Competitors", "International Competitors"),
+        help="Choose which competitor group to analyze"
+    )
+    
+    st.sidebar.markdown("---")
+    
+    # Add Topic Analysis Stats
+    if not df_cache.empty:
+        if view_option == "Close Competitors":
+            st.sidebar.markdown('<h3 style="text-align: center;">Topic Analysis – Close Competitors</h3>', unsafe_allow_html=True)
+        else:
+            st.sidebar.markdown('<h3 style="text-align: center;">Topic Analysis – International Competitors</h3>', unsafe_allow_html=True)
+        
+        # Calculate total websites scraped
+        total_websites = len(df_cache['website'].unique())
+        st.sidebar.metric("Total Websites Scrapped", total_websites)
+        
+        # Calculate total pages scraped
+        st.sidebar.metric("Total Pages Scrapped", len(df_cache))
+        
+        # Calculate unique topics (properly handling list and string types)
+        all_topics = []
+        for topics_entry in df_cache['topics'].dropna():
+            if isinstance(topics_entry, list):
+                # Handle list type
+                all_topics.extend([str(t).strip() for t in topics_entry if t and str(t).strip()])
+            elif isinstance(topics_entry, str) and topics_entry.strip() and topics_entry != '[]':
+                # Handle string type - try to parse as list first
+                try:
+                    import ast
+                    parsed = ast.literal_eval(topics_entry)
+                    if isinstance(parsed, list):
+                        all_topics.extend([str(t).strip() for t in parsed if t and str(t).strip()])
+                    else:
+                        all_topics.extend([t.strip() for t in topics_entry.split(',') if t.strip()])
+                except:
+                    # Fallback to split by comma
+                    all_topics.extend([t.strip() for t in topics_entry.split(',') if t.strip()])
+        
+        # Remove empty strings and get unique topics
+        all_topics = [t for t in all_topics if t]
+        unique_topics = len(set(all_topics))
+        st.sidebar.metric("Unique Topics", unique_topics)
+        
+        # Last update info
+        st.sidebar.markdown("---")
+        st.sidebar.markdown('<h3 style="text-align: center;">Last Update</h3>', unsafe_allow_html=True)
+        st.sidebar.info(f"{last_updated}")
+    
+    st.sidebar.markdown("---")
 
-
-# --------------------------------------------------------------------
-# SIDEBAR & MAIN CONTENT
-# --------------------------------------------------------------------
-st.sidebar.header("Competitor View")
-view_option = st.sidebar.radio(
-    "Select Competitor Group:",
-    ("Close Competitors", "International Competitors")
-)
-st.sidebar.markdown("---")
-
-if view_option == "Close Competitors":
-    close_sites = [s for s in SITES if s["type"] == "competitor_close"]
-    if close_sites:
-        render_competitor_controls(close_sites, "Close")
-    df = load_cache()
-    if not df.empty:
-        show_topic_visualization(df, competitor_type="close", mode=mode)
+    if view_option == "Close Competitors":
+        close_sites = [s for s in SITES if s["type"] == "competitor_close"]
+        if close_sites:
+            render_competitor_controls(close_sites, "Close")
+            # Add spacing before tabs
+            st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+        df = load_cache()
+        if not df.empty:
+            show_topic_visualization(df, competitor_type="close", mode=mode)
+        else:
+            st.info("No data available yet. Run scraper first.")
     else:
-        st.info("⚠️ No data available yet. Run scraper first.")
-else:
-    intl_sites = [s for s in SITES if s["type"] == "competitor_international"]
-    if intl_sites:
-        render_competitor_controls(intl_sites, "International")
-    df = load_cache()
-    if not df.empty:
-        show_topic_visualization(df, competitor_type="international", mode=mode)
-    else:
-        st.info("⚠️ No data available yet. Run scraper first.")
+        intl_sites = [s for s in SITES if s["type"] == "competitor_international"]
+        if intl_sites:
+            render_competitor_controls(intl_sites, "International")
+            # Add spacing before tabs
+            st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+        df = load_cache()
+        if not df.empty:
+            show_topic_visualization(df, competitor_type="international", mode=mode)
+        else:
+            st.info("No data available yet. Run scraper first.")
