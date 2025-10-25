@@ -11,7 +11,7 @@ This module provides comprehensive data visualization capabilities:
 
 import re
 from collections import Counter
-
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -327,25 +327,25 @@ class TopicVisualizer:
 
         st.plotly_chart(fig, use_container_width=True, key=f"plot_{competitor_type}_{id(fig)}")
 
-        # --- Table below the chart ---
-        st.markdown("### 🔍 Competitors Mentioning Each Topic")
-        st.dataframe(
-            comparison_df[['Topic', 'Mentioned By', 'Competitors']],
-            use_container_width=True
-        )
+        # # --- Table below the chart ---
+        # st.markdown("### 🔍 Competitors Mentioning Each Topic")
+        # st.dataframe(
+        #     comparison_df[['Topic', 'Mentioned By', 'Competitors']],
+        #     use_container_width=True
+        # )
 
         # --- Simple insights ---
-        st.subheader("Key Findings")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Your Top Topics:**")
-            for topic, count in base_topics.most_common(5):
-                st.write(f"• {topic}: {count} mentions")
+        # st.subheader("Key Findings")
+        # col1, col2 = st.columns(2)
+        # with col1:
+        #     st.write("**Your Top Topics:**")
+        #     for topic, count in base_topics.most_common(5):
+        #         st.write(f"• {topic}: {count} mentions")
 
-        with col2:
-            st.write("**Competitor Top Topics:**")
-            for topic, count in competitor_topics.most_common(5):
-                st.write(f"• {topic}: {count} mentions")
+        # with col2:
+        #     st.write("**Competitor Top Topics:**")
+        #     for topic, count in competitor_topics.most_common(5):
+        #         st.write(f"• {topic}: {count} mentions")
         
     def create_website_analysis_chart(self, competitor_type="default"):
         """Create a comprehensive website analysis chart"""
@@ -1060,8 +1060,19 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
 
 
         with tabs[2]:
-            st.subheader("Priority Bubble Matrix")
-            visualizer.create_priority_bubble_chart(competitor_type=competitor_type)
+            st.subheader("Topic Overlap Chord Diagram")
+
+            try:
+                df_cache = get_cached_data()
+                if not df_cache.empty:
+                    fig = create_topic_sankey(df, competitor_group="close", top_n=20)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                else:
+                    st.info("No cached data found — please scrape competitors first.")
+            except Exception as e:
+                st.error(f"Chord diagram error: {e}")
+
 
 
         st.markdown("---")
@@ -1227,5 +1238,67 @@ def create_topic_network(df, competitor_group="close", top_n=20):
     fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
     fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
     fig.update_layout(autosize=True, margin=dict(l=20, r=20, t=60, b=20), height=600)
+
+    return fig
+
+def create_topic_sankey(df, competitor_group="close", top_n=20):
+    """
+    Create a Sankey diagram showing how competitors connect to shared topics.
+    """
+    # --- Normalize topics ---
+    all_rows = []
+    for _, row in df.iterrows():
+        site = row["website"]
+        topics = row.get("topics", [])
+        if isinstance(topics, str):
+            try:
+                topics = ast.literal_eval(topics)
+            except Exception:
+                topics = [t.strip() for t in topics.split(",")]
+        topics = [t.strip() for t in topics if t.strip()]
+        for t in topics:
+            all_rows.append({"website": site, "topic": t})
+
+    df_long = pd.DataFrame(all_rows)
+    top_topics = [t for t, _ in Counter(df_long["topic"]).most_common(top_n)]
+    df_long = df_long[df_long["topic"].isin(top_topics)]
+
+    # --- Build Sankey nodes and links ---
+    competitors = df_long["website"].unique().tolist()
+    topics = df_long["topic"].unique().tolist()
+    all_nodes = competitors + topics
+
+    source, target, value = [], [], []
+    for _, row in df_long.iterrows():
+        source.append(all_nodes.index(row["website"]))
+        target.append(all_nodes.index(row["topic"]))
+        value.append(1)
+
+    # --- Sankey figure ---
+    fig = go.Figure(data=[go.Sankey(
+        arrangement="snap",
+        node=dict(
+            pad=20,
+            thickness=18,
+            line=dict(color="rgba(255,255,255,0.1)", width=1),
+            label=all_nodes,
+            color=["#38bdf8" if n in competitors else "#c084fc" for n in all_nodes],
+        ),
+        link=dict(
+            source=source,
+            target=target,
+            value=value,
+            color="rgba(56,189,248,0.4)" if competitor_group == "close" else "rgba(249,115,22,0.4)"
+        )
+    )])
+
+    fig.update_layout(
+        title=f"Topic Flow — {competitor_group.capitalize()} Competitors (Top {top_n} Topics)",
+        font=dict(size=12, color="#f1f5f9"),
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        height=700,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
 
     return fig
