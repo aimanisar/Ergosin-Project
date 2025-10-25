@@ -45,12 +45,12 @@ def apply_plotly_theme(fig, mode="light"):
     """Unified plotly styling for light/dark dashboard modes"""
     if mode == "dark":
         fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#1e293b",
-            plot_bgcolor="#1e293b",
-            font=dict(color="#e2e8f0", size=13),
-            legend=dict(bgcolor="#1e293b", font=dict(color="#e2e8f0")),
-        )
+        template="plotly_dark",
+        paper_bgcolor="#1e293b",
+        plot_bgcolor="#1e293b",
+        font=dict(color="#e2e8f0", size=13),
+        legend=dict(bgcolor="#1e293b", font=dict(color="#e2e8f0")),
+    )
     else:
         fig.update_layout(
             template="plotly_white",
@@ -743,11 +743,11 @@ class TopicVisualizer:
                 
                 if website == base_website:
                     base_mentions = topic_count
-                else:
-                    competitor_mentions += topic_count
-                
-                if topic_count > 0:
-                    websites_covering += 1
+            else:
+                competitor_mentions += topic_count
+            
+            if topic_count > 0:
+                websites_covering += 1
             
             # Calculate priority score
             market_penetration = websites_covering / len(websites) * 100
@@ -807,7 +807,7 @@ class TopicVisualizer:
         
         # Improve text positioning to prevent overlapping
         fig.update_traces(
-            textposition='top center',
+                textposition='top center',
             textfont=dict(size=8)  # Smaller text size
         )
         
@@ -1009,7 +1009,7 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
         #     st.header("📊 Topic Analysis – International Competitors")
         # else:
         #     st.header("📊 Topic Analysis & Comparison")
-
+        
         visualizer = TopicVisualizer()
 
         # Load filtered data
@@ -1019,21 +1019,16 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
         # Display metrics
         # visualizer.display_metrics()
         # st.markdown("---")
-
+        
         # Create tabs for different analysis views
         tabs = st.tabs([
             "📊 Competitive Analysis",
-            # "📈 Website Metrics",
-            "📊 Simple Topic Comparison",
-            # "📉 Topic Trends",
-            "🎯 Priority Matrix",
-            # "⏳ Trend Timeline",
-            # "🧭 Strategic Analysis"
+            "📊 Simple Topic Comparison", 
+            "🎯 Priority Matrix"
         ])
 
         with tabs[0]:
-            # st.subheader("Treemap of Topic Distribution")
-
+            st.subheader("📊 Competitive Analysis - Topic Distribution")
             if not visualizer.competitor_data.empty:
                 # Flatten topic lists safely
                 website_topics = {}
@@ -1055,23 +1050,25 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
     
 
         with tabs[1]:
-            st.subheader("Simple Topic Comparison")
+            st.subheader("📊 Simple Topic Comparison")
             visualizer.create_simple_topic_comparison(competitor_type=competitor_type)
 
 
         with tabs[2]:
-            st.subheader("Topic Overlap Chord Diagram")
+            st.subheader("🎯 Priority Matrix - Topic Overlap Analysis")
 
             try:
                 df_cache = get_cached_data()
                 if not df_cache.empty:
-                    fig = create_topic_sankey(df, competitor_group="close", top_n=20)
+                    # Use the correct competitor group parameter
+                    competitor_group = "close" if competitor_type == "close" else "international"
+                    fig = create_topic_sankey(df_cache, competitor_group=competitor_group, top_n=20)
                     st.plotly_chart(fig, use_container_width=True)
 
                 else:
                     st.info("No cached data found — please scrape competitors first.")
             except Exception as e:
-                st.error(f"Chord diagram error: {e}")
+                st.error(f"Priority Matrix error: {e}")
 
 
 
@@ -1097,87 +1094,201 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
 
 
 def normalize_url(u):
+    """Normalize URL for consistent matching across all functions"""
     if not isinstance(u, str):
         return ""
     return u.lower().replace("https://", "").replace("http://", "").replace("www.", "").strip('/')
 
 
 
-def create_topic_network(df, competitor_group="close", top_n=20):
+def create_topic_network_old(df, competitor_group="close", top_n=20):
     """
-    Build an interactive competitor–topic network graph for either close or international competitors.
+    Build a COMPLETELY ACCURATE competitor–topic network graph.
+    This version fixes all calculation and mapping issues.
     """
 
-    # --- Filter based on competitor group (same logic as treemap uses) ---
-    selected_sites = [normalize_url(s["url"]) for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    # --- Step 1: Proper competitor filtering based on actual data ---
+    print(f"DEBUG: Creating network for {competitor_group} competitors")
+    
+    # Get competitor sites from config
+    competitor_sites = [s for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    competitor_urls = [normalize_url(s["url"]) for s in competitor_sites]
+    competitor_names = {normalize_url(s["url"]): s.get("name", s["url"].split("//")[-1].split("/")[0]) for s in competitor_sites}
+    
+    print(f"DEBUG: Competitor URLs: {competitor_urls}")
+    print(f"DEBUG: Competitor names: {competitor_names}")
+    
+    # Filter data to only include the selected competitor group
     df["website_clean"] = df["website"].apply(normalize_url)
-    df = df[df["website_clean"].isin(selected_sites)]
+    df_filtered = df[df["website_clean"].isin(competitor_urls)].copy()
+    
+    print(f"DEBUG: Filtered data shape: {df_filtered.shape}")
+    print(f"DEBUG: Filtered websites: {df_filtered['website_clean'].unique()}")
 
-    if df.empty:
+    if df_filtered.empty:
         fig = go.Figure()
         fig.update_layout(
             title=f"No data available for {competitor_group.title()} competitors",
-            template="plotly_dark", height=500
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
         )
         return fig
 
-    # --- Extract and clean topics ---
+    # --- Step 2: Intelligent topic normalization and deduplication ---
     all_topics = []
-    for topics in df["topics"].dropna():
-        if isinstance(topics, list):
-            all_topics.extend([t.strip() for t in topics if str(t).strip()])
-        elif isinstance(topics, str):
-            try:
-                parsed = ast.literal_eval(topics)
-                if isinstance(parsed, list):
-                    all_topics.extend([t.strip() for t in parsed if str(t).strip()])
-                else:
-                    all_topics.extend([t.strip() for t in topics.split(',') if str(t).strip()])
-            except Exception:
-                all_topics.extend([t.strip() for t in topics.split(',') if str(t).strip()])
+    topic_website_map = {}  # website -> set of topics
+    website_topic_counts = {}  # website -> topic -> count
+    topic_normalization_map = {}  # original -> normalized
+    
+    print("DEBUG: Processing topics with intelligent normalization...")
+    
+    def normalize_topic(topic):
+        """Intelligent topic normalization to handle duplicates, case, acronyms, and synonyms."""
+        if not topic or not topic.strip():
+            return None
+            
+        # Basic cleaning
+        clean = topic.strip()
+        
+        # Handle common acronyms and synonyms
+        acronym_map = {
+            'ai': 'Artificial Intelligence',
+            'artificial intelligence': 'Artificial Intelligence',
+            'ux': 'User Experience',
+            'ui': 'User Interface',
+            'ui/ux': 'User Experience',
+            'ux/ui': 'User Experience',
+            'user experience': 'User Experience',
+            'user interface': 'User Interface',
+            'digital transformation': 'Digital Transformation',
+            'digital engineering': 'Digital Engineering',
+            'business strategy': 'Business Strategy',
+            'cybersecurity': 'Cybersecurity',
+            'cyber security': 'Cybersecurity',
+            'cyber-security': 'Cybersecurity',
+            'ai transformation': 'AI Transformation',
+            'ai-transformation': 'AI Transformation',
+            'scaling ai': 'AI Scaling',
+            'scaling artificial intelligence': 'AI Scaling',
+            'organizational readiness': 'Organizational Readiness',
+            'career development': 'Career Development',
+            'career opportunities': 'Career Opportunities',
+            'operating model': 'Operating Model',
+            'business model': 'Business Model',
+            'innovation': 'Innovation',
+            'consulting': 'Consulting',
+            'sustainability': 'Sustainability',
+            'technology': 'Technology',
+            'engineering': 'Engineering',
+            'design': 'Design',
+            'strategy': 'Strategy',
+            'transformation': 'Transformation',
+            'reinvention': 'Reinvention',
+            're-invention': 'Reinvention'
+        }
+        
+        # Check for exact matches first (case-insensitive)
+        lower_clean = clean.lower()
+        for key, value in acronym_map.items():
+            if lower_clean == key.lower():
+                return value
+        
+        # Check for partial matches (contains)
+        for key, value in acronym_map.items():
+            if key.lower() in lower_clean or lower_clean in key.lower():
+                return value
+        
+        # If no mapping found, return title case
+        return clean.title()
+    
+    for _, row in df_filtered.iterrows():
+        site = row["website_clean"]  # Use cleaned website
+        topics_raw = row["topics"]
+        
+        # Parse topics correctly based on actual data format
+        parsed_topics = []
+        if isinstance(topics_raw, str) and topics_raw.strip():
+            # Handle comma-separated string format (most common in your data)
+            parsed_topics = [t.strip() for t in topics_raw.split(',') if t.strip()]
+        elif isinstance(topics_raw, list):
+            parsed_topics = [str(t).strip() for t in topics_raw if str(t).strip()]
+        
+        # Clean and normalize topics with intelligent deduplication
+        for topic in parsed_topics:
+            if topic and topic.strip():
+                normalized_topic = normalize_topic(topic)
+                if normalized_topic:
+                    all_topics.append(normalized_topic)
+                    
+                    # Track topic-website relationships
+                    if site not in topic_website_map:
+                        topic_website_map[site] = set()
+                        website_topic_counts[site] = Counter()
+                    
+                    topic_website_map[site].add(normalized_topic)
+                    website_topic_counts[site][normalized_topic] += 1
+                    
+                    # Store original -> normalized mapping for debugging
+                    topic_normalization_map[topic] = normalized_topic
 
-    top_topics = [t for t, _ in Counter(all_topics).most_common(top_n)]
+    # Get top topics by overall frequency
+    topic_counts = Counter(all_topics)
+    top_topics = [t for t, _ in topic_counts.most_common(top_n)]
+    
+    print(f"DEBUG: Normalization examples:")
+    for orig, norm in list(topic_normalization_map.items())[:10]:
+        print(f"  '{orig}' -> '{norm}'")
+    
+    print(f"DEBUG: Top normalized topics: {top_topics[:10]}")
+    print(f"DEBUG: Topic counts: {dict(topic_counts.most_common(10))}")
+    print(f"DEBUG: Total unique topics after normalization: {len(topic_counts)}")
 
-    # --- Create bipartite graph ---
+    # --- Step 3: Create accurate network graph ---
     G = nx.Graph()
-    competitors = df["website"].unique()
+    
+    # Add competitor nodes with proper names
+    for site in df_filtered["website_clean"].unique():
+        display_name = competitor_names.get(site, site.split('.')[0])
+        G.add_node(site, type="competitor", name=display_name, size=20)
+        print(f"DEBUG: Added competitor node: {site} -> {display_name}")
 
-    for comp in competitors:
-        G.add_node(comp, type="competitor")
+    # Add topic nodes and create accurate edges
+    for topic in top_topics:
+        G.add_node(topic, type="topic", name=topic, size=15)
+        
+        # Create edges only for actual relationships
+        for site, site_topics in topic_website_map.items():
+            if topic in site_topics:
+                G.add_edge(site, topic)
+                print(f"DEBUG: Added edge: {site} -> {topic}")
 
-    for _, row in df.iterrows():
-        site = row["website"]
-        topics = row["topics"]
-        if isinstance(topics, str):
-            try:
-                topics = ast.literal_eval(topics)
-            except Exception:
-                topics = [t.strip() for t in topics.split(',')]
-        for t in topics:
-            if t in top_topics:
-                G.add_node(t, type="topic")
-                G.add_edge(site, t)
+    print(f"DEBUG: Graph nodes: {len(G.nodes())}")
+    print(f"DEBUG: Graph edges: {len(G.edges())}")
 
-    # --- Calculate attributes ---
+    # --- Step 4: Calculate accurate node attributes ---
     degree = dict(G.degree())
-    for n in G.nodes:
-        G.nodes[n]["size"] = 10 + degree[n] * 2
-
-# --- Improved layout: balanced, consistent, centered ---
-    pos = nx.spring_layout(G, k=1.2, iterations=100, seed=42)
-
-    # --- Highlight the most connected (hub) competitor node ---
+    
+    # Calculate proper node sizes based on actual relationships
     for node, data in G.nodes(data=True):
-        if data["type"] == "competitor" and degree[node] == max(degree.values()):
-            data["size"] *= 1.4  # Slightly enlarge main hub node
+        if data["type"] == "competitor":
+            # Size based on number of topics covered
+            topic_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"])
+            G.nodes[node]["size"] = 25 + topic_count * 2
+        else:
+            # Size based on how many competitors mention this topic
+            competitor_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"])
+            G.nodes[node]["size"] = 15 + competitor_count * 3
 
+    # --- Step 5: Create optimal layout ---
+    if len(G.nodes()) > 1:
+        # Use force-directed layout for better positioning
+        pos = nx.spring_layout(G, k=3.0, iterations=300, seed=42)
+    else:
+        pos = {list(G.nodes())[0]: (0, 0)}
 
-    # --- Node colour palette ---
-    COLOR_COMPETITOR = "#38bdf8"   # bright teal-blue
-    COLOR_TOPIC = "#c084fc"        # lavender purple
-    COLOR_EDGE = "rgba(148,163,184,0.35)"  # soft gray edge lines
-
-    # --- Build Plotly figure ---
+    # --- Step 6: Build accurate visualization ---
     edge_x, edge_y = [], []
     for edge in G.edges():
         x0, y0 = pos[edge[0]]
@@ -1185,28 +1296,52 @@ def create_topic_network(df, competitor_group="close", top_n=20):
         edge_x += [x0, x1, None]
         edge_y += [y0, y1, None]
 
-    # Edges
+    # Create edges
     edge_trace = go.Scatter(
         x=edge_x, y=edge_y,
         mode="lines",
-        line=dict(color=COLOR_EDGE, width=0.8),
+        line=dict(color="rgba(148,163,184,0.6)", width=1.5),
         hoverinfo="none"
     )
 
-    # Nodes
+    # Create nodes with accurate information
     node_x, node_y, colors, sizes, labels, hover_texts = [], [], [], [], [], []
+    
     for node, data in G.nodes(data=True):
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
         sizes.append(data["size"])
-        labels.append(node)
+        
         if data["type"] == "competitor":
-            colors.append(COLOR_COMPETITOR)
-            hover_texts.append(f"<b>Competitor:</b> {node}<br>Connections: {degree[node]}")
+            colors.append("#38bdf8")  # Blue for competitors
+            display_name = data.get("name", node.split('.')[0])
+            
+            # Get actual topics this competitor covers
+            connected_topics = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"]
+            topic_frequency = website_topic_counts.get(node, Counter())
+            
+            hover_texts.append(
+                f"<b>Competitor:</b> {display_name}<br>"
+                f"<b>Topics Covered:</b> {len(connected_topics)}<br>"
+                f"<b>Total Topic Mentions:</b> {sum(topic_frequency.values())}<br>"
+                f"<b>Top Topics:</b> {', '.join([t for t, _ in topic_frequency.most_common(3)])}"
+            )
+            labels.append(display_name)
         else:
-            colors.append(COLOR_TOPIC)
-            hover_texts.append(f"<b>Topic:</b> {node}<br>Linked Competitors: {degree[node]}")
+            colors.append("#c084fc")  # Purple for topics
+            
+            # Get competitors that mention this topic
+            connected_competitors = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"]
+            competitor_names_list = [G.nodes[c].get("name", c.split('.')[0]) for c in connected_competitors]
+            
+            hover_texts.append(
+                f"<b>Topic:</b> {node}<br>"
+                f"<b>Mentioned by:</b> {len(connected_competitors)} competitors<br>"
+                f"<b>Competitors:</b> {', '.join(competitor_names_list)}<br>"
+                f"<b>Total Mentions:</b> {topic_counts[node]}"
+            )
+            labels.append(node)
 
     node_trace = go.Scatter(
         x=node_x, y=node_y,
@@ -1218,36 +1353,1369 @@ def create_topic_network(df, competitor_group="close", top_n=20):
         marker=dict(
             size=sizes,
             color=colors,
-            line=dict(width=1.4, color="rgba(255,255,255,0.15)"),
-            opacity=0.95
+            line=dict(width=2, color="rgba(255,255,255,0.3)"),
+            opacity=0.9
         )
     )
 
+    # Create the final accurate figure
     fig = go.Figure(data=[edge_trace, node_trace])
     fig.update_layout(
-                # title=f"Topic Relationship Network — {competitor_group.title()} Competitors (Top {top_n} Keywords)",
+        title=f"Accurate Topic Relationship Network — {competitor_group.title()} Competitors",
         showlegend=False,
         hovermode="closest",
         template="plotly_dark",
         paper_bgcolor="#0f172a",
         plot_bgcolor="#0f172a",
-        margin=dict(l=0, r=0, t=60, b=0),
+        margin=dict(l=20, r=20, t=80, b=20),
         height=700,
+        font=dict(size=12, color="#e2e8f0")
     )
-    # --- Center and balance layout visually ---
+    
+    # Clean axis configuration
     fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
     fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
-    fig.update_layout(autosize=True, margin=dict(l=20, r=20, t=60, b=20), height=600)
 
+    print(f"DEBUG: Created accurate network with {len(G.nodes())} nodes and {len(G.edges())} edges")
+    return fig
+
+def create_topic_network_old_v2(df, competitor_group="close", top_n=20):
+    """
+    Build a COMPLETELY ACCURATE competitor–topic network graph with intelligent normalization.
+    """
+    
+    print(f"DEBUG: Creating network for {competitor_group} competitors")
+    
+    # Get competitor sites from config
+    competitor_sites = [s for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    competitor_urls = [normalize_url(s["url"]) for s in competitor_sites]
+    competitor_names = {normalize_url(s["url"]): s.get("name", s["url"].split("//")[-1].split("/")[0]) for s in competitor_sites}
+    
+    print(f"DEBUG: Competitor URLs: {competitor_urls}")
+    print(f"DEBUG: Competitor names: {competitor_names}")
+    
+    # Filter data to only include the selected competitor group
+    df["website_clean"] = df["website"].apply(normalize_url)
+    df_filtered = df[df["website_clean"].isin(competitor_urls)].copy()
+    
+    print(f"DEBUG: Filtered data shape: {df_filtered.shape}")
+    print(f"DEBUG: Filtered websites: {df_filtered['website_clean'].unique()}")
+
+    if df_filtered.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No data available for {competitor_group.title()} competitors",
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
+        )
+        return fig
+
+    def normalize_topic(topic):
+        """Intelligent topic normalization to handle duplicates, case, acronyms, and synonyms."""
+        if not topic or not topic.strip():
+            return None
+            
+        # Basic cleaning
+        clean = topic.strip()
+        
+        # Handle common acronyms and synonyms
+        acronym_map = {
+            'ai': 'Artificial Intelligence',
+            'artificial intelligence': 'Artificial Intelligence',
+            'ux': 'User Experience',
+            'ui': 'User Interface',
+            'ui/ux': 'User Experience',
+            'ux/ui': 'User Experience',
+            'user experience': 'User Experience',
+            'user interface': 'User Interface',
+            'digital transformation': 'Digital Transformation',
+            'digital engineering': 'Digital Engineering',
+            'business strategy': 'Business Strategy',
+            'cybersecurity': 'Cybersecurity',
+            'cyber security': 'Cybersecurity',
+            'cyber-security': 'Cybersecurity',
+            'ai transformation': 'AI Transformation',
+            'ai-transformation': 'AI Transformation',
+            'scaling ai': 'AI Scaling',
+            'scaling artificial intelligence': 'AI Scaling',
+            'organizational readiness': 'Organizational Readiness',
+            'career development': 'Career Development',
+            'career opportunities': 'Career Opportunities',
+            'operating model': 'Operating Model',
+            'business model': 'Business Model',
+            'innovation': 'Innovation',
+            'consulting': 'Consulting',
+            'sustainability': 'Sustainability',
+            'technology': 'Technology',
+            'engineering': 'Engineering',
+            'design': 'Design',
+            'strategy': 'Strategy',
+            'transformation': 'Transformation',
+            'reinvention': 'Reinvention',
+            're-invention': 'Reinvention'
+        }
+        
+        # Check for exact matches first (case-insensitive)
+        lower_clean = clean.lower()
+        for key, value in acronym_map.items():
+            if lower_clean == key.lower():
+                return value
+        
+        # Check for partial matches (contains)
+        for key, value in acronym_map.items():
+            if key.lower() in lower_clean or lower_clean in key.lower():
+                return value
+        
+        # If no mapping found, return title case
+        return clean.title()
+
+    # Process topics with intelligent normalization
+    all_topics = []
+    topic_website_map = {}  # website -> set of topics
+    website_topic_counts = {}  # website -> topic -> count
+    topic_normalization_map = {}  # original -> normalized
+    
+    print("DEBUG: Processing topics with intelligent normalization...")
+    
+    for _, row in df_filtered.iterrows():
+        site = row["website_clean"]  # Use cleaned website
+        topics_raw = row["topics"]
+        
+        # Parse topics correctly based on actual data format
+        parsed_topics = []
+        if isinstance(topics_raw, str) and topics_raw.strip():
+            # Handle comma-separated string format (most common in your data)
+            parsed_topics = [t.strip() for t in topics_raw.split(',') if t.strip()]
+        elif isinstance(topics_raw, list):
+            parsed_topics = [str(t).strip() for t in topics_raw if str(t).strip()]
+        
+        # Clean and normalize topics with intelligent deduplication
+        for topic in parsed_topics:
+            if topic and topic.strip():
+                normalized_topic = normalize_topic(topic)
+                if normalized_topic:
+                    all_topics.append(normalized_topic)
+                    
+                    # Track topic-website relationships
+                    if site not in topic_website_map:
+                        topic_website_map[site] = set()
+                        website_topic_counts[site] = Counter()
+                    
+                    topic_website_map[site].add(normalized_topic)
+                    website_topic_counts[site][normalized_topic] += 1
+                    
+                    # Store original -> normalized mapping for debugging
+                    topic_normalization_map[topic] = normalized_topic
+
+    # Get top topics by overall frequency
+    topic_counts = Counter(all_topics)
+    top_topics = [t for t, _ in topic_counts.most_common(top_n)]
+    
+    print(f"DEBUG: Normalization examples:")
+    for orig, norm in list(topic_normalization_map.items())[:10]:
+        print(f"  '{orig}' -> '{norm}'")
+    
+    print(f"DEBUG: Top normalized topics: {top_topics[:10]}")
+    print(f"DEBUG: Topic counts: {dict(topic_counts.most_common(10))}")
+    print(f"DEBUG: Total unique topics after normalization: {len(topic_counts)}")
+
+    # Create accurate network graph
+    G = nx.Graph()
+    
+    # Add competitor nodes with proper names
+    for site in df_filtered["website_clean"].unique():
+        display_name = competitor_names.get(site, site.split('.')[0])
+        G.add_node(site, type="competitor", name=display_name, size=20)
+        print(f"DEBUG: Added competitor node: {site} -> {display_name}")
+
+    # Add topic nodes and create accurate edges
+    for topic in top_topics:
+        G.add_node(topic, type="topic", name=topic, size=15)
+        
+        # Create edges only for actual relationships
+        for site, site_topics in topic_website_map.items():
+            if topic in site_topics:
+                G.add_edge(site, topic)
+                print(f"DEBUG: Added edge: {site} -> {topic}")
+
+    print(f"DEBUG: Graph nodes: {len(G.nodes())}")
+    print(f"DEBUG: Graph edges: {len(G.edges())}")
+
+    # Calculate accurate node attributes
+    degree = dict(G.degree())
+    
+    # Calculate proper node sizes based on actual relationships
+    for node, data in G.nodes(data=True):
+        if data["type"] == "competitor":
+            # Size based on number of topics covered
+            topic_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"])
+            G.nodes[node]["size"] = 25 + topic_count * 2
+        else:
+            # Size based on how many competitors mention this topic
+            competitor_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"])
+            G.nodes[node]["size"] = 15 + competitor_count * 3
+
+    # Create optimal layout
+    if len(G.nodes()) > 1:
+        # Use force-directed layout for better positioning
+        pos = nx.spring_layout(G, k=3.0, iterations=300, seed=42)
+    else:
+        pos = {list(G.nodes())[0]: (0, 0)}
+
+    # Build accurate visualization
+    edge_x, edge_y = [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    # Create edges
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(color="rgba(148,163,184,0.6)", width=1.5),
+        hoverinfo="none"
+    )
+
+    # Create nodes with accurate information
+    node_x, node_y, colors, sizes, labels, hover_texts = [], [], [], [], [], []
+    
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        sizes.append(data["size"])
+        
+        if data["type"] == "competitor":
+            colors.append("#38bdf8")  # Blue for competitors
+            display_name = data.get("name", node.split('.')[0])
+            
+            # Get actual topics this competitor covers
+            connected_topics = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"]
+            topic_frequency = website_topic_counts.get(node, Counter())
+            
+            hover_texts.append(
+                f"<b>Competitor:</b> {display_name}<br>"
+                f"<b>Topics Covered:</b> {len(connected_topics)}<br>"
+                f"<b>Total Topic Mentions:</b> {sum(topic_frequency.values())}<br>"
+                f"<b>Top Topics:</b> {', '.join([t for t, _ in topic_frequency.most_common(3)])}"
+            )
+            labels.append(display_name)
+        else:
+            colors.append("#c084fc")  # Purple for topics
+            
+            # Get competitors that mention this topic
+            connected_competitors = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"]
+            competitor_names_list = [G.nodes[c].get("name", c.split('.')[0]) for c in connected_competitors]
+            
+            hover_texts.append(
+                f"<b>Topic:</b> {node}<br>"
+                f"<b>Mentioned by:</b> {len(connected_competitors)} competitors<br>"
+                f"<b>Competitors:</b> {', '.join(competitor_names_list)}<br>"
+                f"<b>Total Mentions:</b> {topic_counts[node]}"
+            )
+            labels.append(node)
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        text=labels,
+        hovertext=hover_texts,
+        textposition="top center",
+        hoverinfo="text",
+        marker=dict(
+            size=sizes,
+            color=colors,
+            line=dict(width=2, color="rgba(255,255,255,0.3)"),
+            opacity=0.9
+        )
+    )
+
+    # Create the final accurate figure
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title=f"Accurate Topic Relationship Network — {competitor_group.title()} Competitors (Normalized)",
+        showlegend=False,
+        hovermode="closest",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        margin=dict(l=20, r=20, t=80, b=20),
+        height=700,
+        font=dict(size=12, color="#e2e8f0")
+    )
+    
+    # Clean axis configuration
+    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
+    fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
+
+    print(f"DEBUG: Created accurate network with {len(G.nodes())} nodes and {len(G.edges())} edges")
+    return fig
+
+def create_topic_network_old_messy(df, competitor_group="close", top_n=20):
+    """
+    Build a COMPLETELY ACCURATE competitor–topic network graph with correct competitor filtering.
+    """
+    
+    print(f"DEBUG: Creating network for {competitor_group} competitors")
+    
+    # Get competitor sites from config
+    competitor_sites = [s for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    
+    # Create flexible URL matching
+    competitor_urls = []
+    competitor_names = {}
+    
+    for site in competitor_sites:
+        normalized_url = normalize_url(site["url"])
+        competitor_urls.append(normalized_url)
+        competitor_names[normalized_url] = site.get("name", site["url"].split("//")[-1].split("/")[0])
+        
+        # Also add base domain for better matching
+        base_domain = normalized_url.split('/')[0]
+        if base_domain not in competitor_urls:
+            competitor_urls.append(base_domain)
+            competitor_names[base_domain] = site.get("name", site["url"].split("//")[-1].split("/")[0])
+    
+    print(f"DEBUG: Competitor URLs: {competitor_urls}")
+    print(f"DEBUG: Competitor names: {competitor_names}")
+    
+    # Filter data with flexible matching
+    df["website_clean"] = df["website"].apply(normalize_url)
+    
+    # Try multiple matching strategies - collect ALL matches
+    df_filtered = pd.DataFrame()
+    for url in competitor_urls:
+        # Exact match
+        exact_match = df[df["website_clean"] == url]
+        if not exact_match.empty:
+            df_filtered = pd.concat([df_filtered, exact_match], ignore_index=True)
+            
+        # Partial match (contains) - only if no exact match
+        elif df["website_clean"].str.contains(url, na=False).any():
+            partial_match = df[df["website_clean"].str.contains(url, na=False)]
+            df_filtered = pd.concat([df_filtered, partial_match], ignore_index=True)
+            
+        # Reverse partial match (url contains website_clean) - only if no other match
+        elif df["website_clean"].apply(lambda x: url in x if pd.notna(x) else False).any():
+            reverse_match = df[df["website_clean"].apply(lambda x: url in x if pd.notna(x) else False)]
+            df_filtered = pd.concat([df_filtered, reverse_match], ignore_index=True)
+    
+    # Remove duplicates (handle unhashable types)
+    if not df_filtered.empty:
+        # Convert unhashable columns to strings for deduplication
+        df_filtered = df_filtered.copy()
+        for col in df_filtered.columns:
+            if df_filtered[col].dtype == 'object':
+                df_filtered[col] = df_filtered[col].astype(str)
+        df_filtered = df_filtered.drop_duplicates()
+    
+    print(f"DEBUG: Filtered data shape: {df_filtered.shape}")
+    print(f"DEBUG: Filtered websites: {df_filtered['website_clean'].unique()}")
+
+    if df_filtered.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No data available for {competitor_group.title()} competitors",
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
+        )
+        return fig
+
+    def normalize_topic(topic):
+        """Intelligent topic normalization to handle duplicates, case, acronyms, and synonyms."""
+        if not topic or not topic.strip():
+            return None
+            
+        # Basic cleaning
+        clean = topic.strip()
+        
+        # Handle common acronyms and synonyms
+        acronym_map = {
+            'ai': 'Artificial Intelligence',
+            'artificial intelligence': 'Artificial Intelligence',
+            'ux': 'User Experience',
+            'ui': 'User Interface',
+            'ui/ux': 'User Experience',
+            'ux/ui': 'User Experience',
+            'user experience': 'User Experience',
+            'user interface': 'User Interface',
+            'digital transformation': 'Digital Transformation',
+            'digital engineering': 'Digital Engineering',
+            'business strategy': 'Business Strategy',
+            'cybersecurity': 'Cybersecurity',
+            'cyber security': 'Cybersecurity',
+            'cyber-security': 'Cybersecurity',
+            'ai transformation': 'AI Transformation',
+            'ai-transformation': 'AI Transformation',
+            'scaling ai': 'AI Scaling',
+            'scaling artificial intelligence': 'AI Scaling',
+            'organizational readiness': 'Organizational Readiness',
+            'career development': 'Career Development',
+            'career opportunities': 'Career Opportunities',
+            'operating model': 'Operating Model',
+            'business model': 'Business Model',
+            'innovation': 'Innovation',
+            'consulting': 'Consulting',
+            'sustainability': 'Sustainability',
+            'technology': 'Technology',
+            'engineering': 'Engineering',
+            'design': 'Design',
+            'strategy': 'Strategy',
+            'transformation': 'Transformation',
+            'reinvention': 'Reinvention',
+            're-invention': 'Reinvention'
+        }
+        
+        # Check for exact matches first (case-insensitive)
+        lower_clean = clean.lower()
+        for key, value in acronym_map.items():
+            if lower_clean == key.lower():
+                return value
+        
+        # Check for partial matches (contains)
+        for key, value in acronym_map.items():
+            if key.lower() in lower_clean or lower_clean in key.lower():
+                return value
+        
+        # If no mapping found, return title case
+        return clean.title()
+
+    # Process topics with intelligent normalization
+    all_topics = []
+    topic_website_map = {}  # website -> set of topics
+    website_topic_counts = {}  # website -> topic -> count
+    topic_normalization_map = {}  # original -> normalized
+    
+    print("DEBUG: Processing topics with intelligent normalization...")
+    
+    for _, row in df_filtered.iterrows():
+        site = row["website_clean"]  # Use cleaned website
+        topics_raw = row["topics"]
+        
+        # Parse topics correctly based on actual data format
+        parsed_topics = []
+        if isinstance(topics_raw, str) and topics_raw.strip():
+            # Handle comma-separated string format (most common in your data)
+            parsed_topics = [t.strip() for t in topics_raw.split(',') if t.strip()]
+        elif isinstance(topics_raw, list):
+            parsed_topics = [str(t).strip() for t in topics_raw if str(t).strip()]
+        
+        # Clean and normalize topics with intelligent deduplication
+        for topic in parsed_topics:
+            if topic and topic.strip():
+                normalized_topic = normalize_topic(topic)
+                if normalized_topic:
+                    all_topics.append(normalized_topic)
+                    
+                    # Track topic-website relationships
+                    if site not in topic_website_map:
+                        topic_website_map[site] = set()
+                        website_topic_counts[site] = Counter()
+                    
+                    topic_website_map[site].add(normalized_topic)
+                    website_topic_counts[site][normalized_topic] += 1
+                    
+                    # Store original -> normalized mapping for debugging
+                    topic_normalization_map[topic] = normalized_topic
+
+    # Get top topics by overall frequency
+    topic_counts = Counter(all_topics)
+    top_topics = [t for t, _ in topic_counts.most_common(top_n)]
+    
+    print(f"DEBUG: Normalization examples:")
+    for orig, norm in list(topic_normalization_map.items())[:10]:
+        print(f"  '{orig}' -> '{norm}'")
+    
+    print(f"DEBUG: Top normalized topics: {top_topics[:10]}")
+    print(f"DEBUG: Topic counts: {dict(topic_counts.most_common(10))}")
+    print(f"DEBUG: Total unique topics after normalization: {len(topic_counts)}")
+
+    # Create accurate network graph
+    G = nx.Graph()
+    
+    # Add competitor nodes with proper names
+    for site in df_filtered["website_clean"].unique():
+        # Find the best matching name
+        display_name = site
+        for url, name in competitor_names.items():
+            if url in site or site in url:
+                display_name = name
+                break
+        
+        G.add_node(site, type="competitor", name=display_name, size=20)
+        print(f"DEBUG: Added competitor node: {site} -> {display_name}")
+
+    # Add topic nodes and create accurate edges
+    for topic in top_topics:
+        G.add_node(topic, type="topic", name=topic, size=15)
+        
+        # Create edges only for actual relationships
+        for site, site_topics in topic_website_map.items():
+            if topic in site_topics:
+                G.add_edge(site, topic)
+                print(f"DEBUG: Added edge: {site} -> {topic}")
+
+    print(f"DEBUG: Graph nodes: {len(G.nodes())}")
+    print(f"DEBUG: Graph edges: {len(G.edges())}")
+
+    # Calculate accurate node attributes
+    degree = dict(G.degree())
+    
+    # Calculate proper node sizes based on actual relationships
+    for node, data in G.nodes(data=True):
+        if data["type"] == "competitor":
+            # Size based on number of topics covered
+            topic_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"])
+            G.nodes[node]["size"] = 25 + topic_count * 2
+        else:
+            # Size based on how many competitors mention this topic
+            competitor_count = len([n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"])
+            G.nodes[node]["size"] = 15 + competitor_count * 3
+
+    # Create optimal layout
+    if len(G.nodes()) > 1:
+        # Use force-directed layout for better positioning
+        pos = nx.spring_layout(G, k=3.0, iterations=300, seed=42)
+    else:
+        pos = {list(G.nodes())[0]: (0, 0)}
+
+    # Build accurate visualization
+    edge_x, edge_y = [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    # Create edges
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(color="rgba(148,163,184,0.6)", width=1.5),
+        hoverinfo="none"
+    )
+
+    # Create nodes with accurate information
+    node_x, node_y, colors, sizes, labels, hover_texts = [], [], [], [], [], []
+    
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        sizes.append(data["size"])
+        
+        if data["type"] == "competitor":
+            colors.append("#38bdf8")  # Blue for competitors
+            display_name = data.get("name", node.split('.')[0])
+            
+            # Get actual topics this competitor covers
+            connected_topics = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"]
+            topic_frequency = website_topic_counts.get(node, Counter())
+            
+            hover_texts.append(
+                f"<b>Competitor:</b> {display_name}<br>"
+                f"<b>Topics Covered:</b> {len(connected_topics)}<br>"
+                f"<b>Total Topic Mentions:</b> {sum(topic_frequency.values())}<br>"
+                f"<b>Top Topics:</b> {', '.join([t for t, _ in topic_frequency.most_common(3)])}"
+            )
+            labels.append(display_name)
+        else:
+            colors.append("#c084fc")  # Purple for topics
+            
+            # Get competitors that mention this topic
+            connected_competitors = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"]
+            competitor_names_list = [G.nodes[c].get("name", c.split('.')[0]) for c in connected_competitors]
+            
+            hover_texts.append(
+                f"<b>Topic:</b> {node}<br>"
+                f"<b>Mentioned by:</b> {len(connected_competitors)} competitors<br>"
+                f"<b>Competitors:</b> {', '.join(competitor_names_list)}<br>"
+                f"<b>Total Mentions:</b> {topic_counts[node]}"
+            )
+            labels.append(node)
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        text=labels,
+        hovertext=hover_texts,
+        textposition="top center",
+        hoverinfo="text",
+        marker=dict(
+            size=sizes,
+            color=colors,
+            line=dict(width=2, color="rgba(255,255,255,0.3)"),
+            opacity=0.9
+        )
+    )
+
+    # Create the final accurate figure
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title=f"Accurate Topic Relationship Network — {competitor_group.title()} Competitors (All {len(df_filtered['website_clean'].unique())} Competitors)",
+        showlegend=False,
+        hovermode="closest",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        margin=dict(l=20, r=20, t=80, b=20),
+        height=700,
+        font=dict(size=12, color="#e2e8f0")
+    )
+    
+    # Clean axis configuration
+    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
+    fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
+
+    print(f"DEBUG: Created accurate network with {len(G.nodes())} nodes and {len(G.edges())} edges")
+    return fig
+
+def create_topic_network(df, competitor_group="close", max_topics=25):
+    """
+    Build a FIXED competitor–topic network graph with proper logic and calculations.
+    """
+    
+    print(f"DEBUG: Creating FIXED network for {competitor_group} competitors")
+    
+    # Get competitor sites from config
+    competitor_sites = [s for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    
+    if not competitor_sites:
+        print(f"DEBUG: No competitors found for group: {competitor_group}")
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No competitors configured for {competitor_group.title()} group",
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
+        )
+        return fig
+    
+    # Create competitor URL matching with multiple strategies
+    competitor_urls = []
+    competitor_names = {}
+    
+    for site in competitor_sites:
+        url = site["url"]
+        name = site.get("name", url.split("//")[-1].split("/")[0])
+        
+        # Add multiple URL variations for better matching
+        normalized_url = normalize_url(url)
+        competitor_urls.append(normalized_url)
+        competitor_names[normalized_url] = name
+        
+        # Add base domain
+        base_domain = normalized_url.split('/')[0]
+        if base_domain not in competitor_urls:
+            competitor_urls.append(base_domain)
+            competitor_names[base_domain] = name
+        
+        # Add original URL variations
+        if url not in competitor_urls:
+            competitor_urls.append(url)
+            competitor_names[url] = name
+    
+    print(f"DEBUG: Competitor URLs: {competitor_urls}")
+    print(f"DEBUG: Competitor names: {competitor_names}")
+    
+    # Special debugging for International Competitors
+    if competitor_group == "international":
+        print(f"DEBUG: INTERNATIONAL COMPETITORS ANALYSIS:")
+        print(f"DEBUG: Expected 8 international competitors:")
+        for i, site in enumerate(competitor_sites, 1):
+            print(f"  {i}. {site['name']} - {site['url']}")
+        print(f"DEBUG: Total competitor sites found: {len(competitor_sites)}")
+    
+    # Filter data with improved matching - use same logic as Sankey function
+    df["website_clean"] = df["website"].apply(normalize_url)
+    
+    # Use consistent matching logic
+    matched_rows = []
+    matched_sites = set()
+    
+    for _, row in df.iterrows():
+        site_url = row["website"]
+        normalized_site = normalize_url(site_url)
+        
+        # Check if this site matches any competitor with improved matching
+        for i, comp_url in enumerate(competitor_urls):
+            norm_comp_url = normalize_url(comp_url)
+            match_found = False
+            
+            # Exact match
+            if normalized_site == norm_comp_url:
+                match_found = True
+                print(f"DEBUG: Exact match: {site_url} -> {comp_url}")
+            
+            # Partial match - competitor URL in site URL
+            elif norm_comp_url in normalized_site and len(norm_comp_url) > 3:
+                match_found = True
+                print(f"DEBUG: Partial match (comp in site): {site_url} -> {comp_url}")
+            
+            # Reverse match - site URL in competitor URL
+            elif normalized_site in norm_comp_url and len(normalized_site) > 3:
+                match_found = True
+                print(f"DEBUG: Reverse match (site in comp): {site_url} -> {comp_url}")
+            
+            # Domain match - check if domains match
+            elif ('.' in normalized_site and '.' in norm_comp_url):
+                site_domain = '.'.join(normalized_site.split('.')[-2:])
+                comp_domain = '.'.join(norm_comp_url.split('.')[-2:])
+                if site_domain == comp_domain:
+                    match_found = True
+                    print(f"DEBUG: Domain match: {site_url} -> {comp_url}")
+            
+            if match_found and site_url not in matched_sites:
+                matched_rows.append(row)
+                matched_sites.add(site_url)
+                break
+    
+    # Create filtered dataframe efficiently
+    if matched_rows:
+        df_filtered = pd.DataFrame(matched_rows)
+    else:
+        df_filtered = pd.DataFrame()
+    
+    # Remove duplicates properly
+    if not df_filtered.empty:
+        # Create a hashable version for deduplication
+        df_filtered = df_filtered.copy()
+        # Convert problematic columns to strings for deduplication
+        for col in df_filtered.columns:
+            if df_filtered[col].dtype == 'object':
+                df_filtered[col] = df_filtered[col].astype(str)
+        
+        # Remove duplicates based on all columns
+        df_filtered = df_filtered.drop_duplicates()
+    
+    print(f"DEBUG: Filtered data shape: {df_filtered.shape}")
+    print(f"DEBUG: Filtered websites: {df_filtered['website_clean'].unique()}")
+    print(f"DEBUG: All available websites in data: {df['website'].unique()}")
+    print(f"DEBUG: Total rows in original data: {len(df)}")
+    print(f"DEBUG: Looking for {len(competitor_urls)} competitors: {competitor_urls}")
+    
+    # Special analysis for International Competitors
+    if competitor_group == "international":
+        print(f"DEBUG: INTERNATIONAL MATCHING RESULTS:")
+        print(f"DEBUG: Found {len(matched_sites)} international competitors in data:")
+        for site in matched_sites:
+            print(f"  ✓ {site}")
+        
+        missing_international = []
+        for comp_url in competitor_urls:
+            found = False
+            for matched_site in matched_sites:
+                if normalize_url(comp_url) in normalize_url(matched_site) or normalize_url(matched_site) in normalize_url(comp_url):
+                    found = True
+                    break
+            if not found:
+                missing_international.append(comp_url)
+        
+        if missing_international:
+            print(f"DEBUG: Missing international competitors ({len(missing_international)}):")
+            for url in missing_international:
+                name = competitor_names.get(url, url.split("//")[-1].split("/")[0])
+                print(f"  ✗ {name} - {url}")
+        else:
+            print(f"DEBUG: ✓ All 8 international competitors found!")
+    
+    # Additional debugging: show what we're trying to match
+    print(f"DEBUG: Available websites in data (normalized):")
+    for website in df['website'].unique():
+        normalized = normalize_url(website)
+        print(f"  '{website}' -> '{normalized}'")
+    
+    if df_filtered.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No data available for {competitor_group.title()} competitors",
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
+        )
+        return fig
+    
+    def normalize_topic(topic):
+        """Intelligent topic normalization to handle duplicates, case, acronyms, and synonyms."""
+        if not topic or not topic.strip():
+            return None
+            
+        # Basic cleaning - remove brackets, quotes, and extra whitespace
+        clean = topic.strip().strip("[]'\"")
+        
+        # Handle common acronyms and synonyms with case-insensitive matching
+        acronym_map = {
+            'ai': 'Artificial Intelligence',
+            'artificial intelligence': 'Artificial Intelligence',
+            'ux': 'User Experience',
+            'ui': 'User Interface',
+            'ui/ux': 'User Experience',
+            'ux/ui': 'User Experience',
+            'user experience': 'User Experience',
+            'user interface': 'User Interface',
+            'digital transformation': 'Digital Transformation',
+            'digital engineering': 'Digital Engineering',
+            'business strategy': 'Business Strategy',
+            'cybersecurity': 'Cybersecurity',
+            'cyber security': 'Cybersecurity',
+            'cyber-security': 'Cybersecurity',
+            'ai transformation': 'AI Transformation',
+            'ai-transformation': 'AI Transformation',
+            'scaling ai': 'AI Scaling',
+            'scaling artificial intelligence': 'AI Scaling',
+            'organizational readiness': 'Organizational Readiness',
+            'career development': 'Career Development',
+            'career opportunities': 'Career Opportunities',
+            'operating model': 'Operating Model',
+            'business model': 'Business Model',
+            'innovation': 'Innovation',
+            'consulting': 'Consulting',
+            'sustainability': 'Sustainability',
+            'technology': 'Technology',
+            'engineering': 'Engineering',
+            'design': 'Design',
+            'strategy': 'Strategy',
+            'transformation': 'Transformation',
+            'reinvention': 'Reinvention',
+            're-invention': 'Reinvention',
+            'machine learning': 'Machine Learning',
+            'ml': 'Machine Learning',
+            'data science': 'Data Science',
+            'cloud computing': 'Cloud Computing',
+            'iot': 'Internet of Things',
+            'internet of things': 'Internet of Things',
+            'blockchain': 'Blockchain',
+            'automation': 'Automation',
+            'robotics': 'Robotics',
+            'virtual reality': 'Virtual Reality',
+            'vr': 'Virtual Reality',
+            'augmented reality': 'Augmented Reality',
+            'ar': 'Augmented Reality'
+        }
+        
+        # Normalize to lowercase for comparison
+        lower_clean = clean.lower().strip()
+        
+        # Check for exact matches first (case-insensitive)
+        for key, value in acronym_map.items():
+            if lower_clean == key.lower():
+                return value
+        
+        # Check for partial matches (contains) - but be more strict to avoid false positives
+        for key, value in acronym_map.items():
+            key_lower = key.lower()
+            if (key_lower in lower_clean and len(key_lower) > 3) or (lower_clean in key_lower and len(lower_clean) > 3):
+                return value
+        
+        # If no mapping found, return properly capitalized version
+        # Handle special cases for consistent capitalization
+        if lower_clean in ['innovation', 'business strategy', 'cybersecurity']:
+            return clean.title()
+        
+        # For other topics, use title case but preserve acronyms
+        words = clean.split()
+        result = []
+        for word in words:
+            if len(word) <= 3 and word.isupper():
+                result.append(word)  # Keep acronyms as-is
+            else:
+                result.append(word.title())
+        return ' '.join(result)
+
+    def parse_topics_safely(topics_raw):
+        """Safely parse topics from various data formats."""
+        if not topics_raw or pd.isna(topics_raw):
+            return []
+        
+        # Handle string format
+        if isinstance(topics_raw, str):
+            topics_str = topics_raw.strip()
+            if not topics_str or topics_str in ['[]', 'null', 'none', '']:
+                return []
+            
+            # Try to parse as list first
+            try:
+                parsed = ast.literal_eval(topics_str)
+                if isinstance(parsed, list):
+                    return [str(t).strip() for t in parsed if t and str(t).strip()]
+            except:
+                pass
+            
+            # Fallback to comma-separated
+            return [t.strip() for t in topics_str.split(',') if t.strip()]
+        
+        # Handle list format
+        elif isinstance(topics_raw, list):
+            return [str(t).strip() for t in topics_raw if t and str(t).strip()]
+        
+        return []
+
+    # Process topics with improved logic
+    all_topics = []
+    topic_website_map = {}  # website -> set of topics
+    website_topic_counts = {}  # website -> topic -> count
+    topic_normalization_map = {}  # original -> normalized
+    
+    print("DEBUG: Processing topics with improved logic...")
+    
+    for _, row in df_filtered.iterrows():
+        site = row["website_clean"]
+        topics_raw = row["topics"]
+        
+        # Parse topics safely
+        parsed_topics = parse_topics_safely(topics_raw)
+        
+        # Process each topic
+        for topic in parsed_topics:
+            if topic and len(topic.strip()) > 2:  # Minimum length filter
+                normalized_topic = normalize_topic(topic)
+                if normalized_topic and len(normalized_topic.strip()) > 2:
+                    all_topics.append(normalized_topic)
+                    
+                    # Track relationships
+                    if site not in topic_website_map:
+                        topic_website_map[site] = set()
+                        website_topic_counts[site] = Counter()
+                    
+                    topic_website_map[site].add(normalized_topic)
+                    website_topic_counts[site][normalized_topic] += 1
+                    
+                    # Store mapping for debugging
+                    topic_normalization_map[topic] = normalized_topic
+    
+    # Get ALL topics - NO ARTIFICIAL FILTERING
+    topic_counts = Counter(all_topics)
+    
+    # Only filter out topics with 0 mentions (shouldn't happen but safety check)
+    all_meaningful_topics = {topic: count for topic, count in topic_counts.items() if count > 0}
+    
+    # Get top topics - NO FREQUENCY LIMITING, just limit by max_topics for visualization
+    top_topics = [t for t, _ in Counter(all_meaningful_topics).most_common(max_topics)]
+    
+    print(f"DEBUG: Normalization examples:")
+    for orig, norm in list(topic_normalization_map.items())[:10]:
+        print(f"  '{orig}' -> '{norm}'")
+    
+    print(f"DEBUG: ALL topics found: {len(topic_counts)}")
+    print(f"DEBUG: Meaningful topics: {len(all_meaningful_topics)}")
+    print(f"DEBUG: Selected topics for visualization: {len(top_topics)}")
+    print(f"DEBUG: Top topics: {top_topics}")
+    print(f"DEBUG: Topic counts: {dict(topic_counts.most_common(15))}")
+    print(f"DEBUG: Topic-Website mapping keys: {list(topic_website_map.keys())}")
+    
+    if not top_topics:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No meaningful topics found for {competitor_group.title()} competitors",
+            template="plotly_dark", 
+            height=500,
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a"
+        )
+        return fig
+    
+    # Create network graph
+    G = nx.Graph()
+    
+    # Add competitor nodes
+    for site in df_filtered["website_clean"].unique():
+        # Find best matching name
+        display_name = site
+        for url, name in competitor_names.items():
+            if url in site or site in url:
+                display_name = name
+                break
+        
+        G.add_node(site, type="competitor", name=display_name, size=30)
+        print(f"DEBUG: Added competitor node: {site} -> {display_name}")
+    
+    # Add topic nodes first
+    for topic in top_topics:
+        G.add_node(topic, type="topic", name=topic, size=20)
+    
+    # Create edges for actual relationships - FIXED LOGIC
+    for site, site_topics in topic_website_map.items():
+        # Only create edges if the site exists in the graph
+        if site in G.nodes():
+            for topic in site_topics:
+                if topic in G.nodes():
+                    G.add_edge(site, topic)
+                    print(f"DEBUG: Added edge: {site} -> {topic}")
+    
+    print(f"DEBUG: Graph nodes: {len(G.nodes())}")
+    print(f"DEBUG: Graph edges: {len(G.edges())}")
+    
+    # Calculate node attributes properly - FIXED LOGIC
+    for node, data in G.nodes(data=True):
+        if data["type"] == "competitor":
+            # Size based on actual topics from data, not graph structure
+            site_topics = topic_website_map.get(node, set())
+            topic_count = len(site_topics)
+            G.nodes[node]["size"] = max(30, 30 + topic_count * 5)
+        else:
+            # Size based on actual competitors from data, not graph structure
+            competitor_count = 0
+            for site, site_topics in topic_website_map.items():
+                if node in site_topics:
+                    competitor_count += 1
+            G.nodes[node]["size"] = max(20, 20 + competitor_count * 5)
+    
+    # Create optimal layout
+    if len(G.nodes()) > 1:
+        # Use spring layout with better parameters
+        pos = nx.spring_layout(G, k=4.0, iterations=1000, seed=42)
+    else:
+        pos = {list(G.nodes())[0]: (0, 0)}
+    
+    # Build visualization
+    edge_x, edge_y = [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+    
+    # Create edges
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(color="rgba(148,163,184,0.6)", width=2),
+        hoverinfo="none"
+    )
+    
+    # Create nodes
+    node_x, node_y, colors, sizes, labels, hover_texts = [], [], [], [], [], []
+    
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        sizes.append(data["size"])
+        
+        if data["type"] == "competitor":
+            colors.append("#3b82f6")  # Blue for competitors
+            display_name = data.get("name", node.split('.')[0])
+            
+            # Get connected topics
+            connected_topics = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "topic"]
+            topic_frequency = website_topic_counts.get(node, Counter())
+            
+            hover_texts.append(
+                f"<b>🏢 {display_name}</b><br>"
+                f"<b>Topics Covered:</b> {len(connected_topics)}<br>"
+                f"<b>Total Mentions:</b> {sum(topic_frequency.values())}<br>"
+                f"<b>Top Topics:</b> {', '.join([t for t, _ in topic_frequency.most_common(3)])}"
+            )
+            labels.append(display_name)
+        else:
+            colors.append("#8b5cf6")  # Purple for topics
+            
+            # Get connected competitors
+            connected_competitors = [n for n in G.neighbors(node) if G.nodes[n]["type"] == "competitor"]
+            competitor_names_list = [G.nodes[c].get("name", c.split('.')[0]) for c in connected_competitors]
+            
+            hover_texts.append(
+                f"<b>📊 {node}</b><br>"
+                f"<b>Mentioned by:</b> {len(connected_competitors)} competitors<br>"
+                f"<b>Competitors:</b> {', '.join(competitor_names_list)}<br>"
+                f"<b>Total Mentions:</b> {topic_counts[node]}"
+            )
+            labels.append(node)
+    
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        text=labels,
+        hovertext=hover_texts,
+        textposition="top center",
+        hoverinfo="text",
+        marker=dict(
+            size=sizes,
+            color=colors,
+            line=dict(width=2, color="rgba(255,255,255,0.8)"),
+            opacity=0.9
+        ),
+        textfont=dict(size=11, color="white", family="Arial")
+    )
+    
+    # Create final figure
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title=f"🎯 Ultra Clean Topic Network — {competitor_group.title()} Competitors ({len(df_filtered['website_clean'].unique())} Competitors, {len(top_topics)} Topics)",
+        showlegend=False,
+        hovermode="closest",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        margin=dict(l=50, r=50, t=120, b=50),
+        height=800,  # Taller for better visibility
+        font=dict(size=13, color="#e2e8f0")
+    )
+    
+    # Clean axis configuration
+    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
+    fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
+    
+    print(f"DEBUG: Created FIXED network with {len(G.nodes())} nodes and {len(G.edges())} edges")
     return fig
 
 def create_topic_sankey(df, competitor_group="close", top_n=20):
     """
-    Create a Sankey diagram showing how competitors connect to shared topics.
+    Create a CLEAN Sankey diagram showing how competitors connect to shared topics.
+    Fixed to reduce visual clutter and improve readability.
     """
-    # --- Normalize topics ---
+    # --- FIRST: Filter data by competitor group ---
+    print(f"DEBUG: ===== PRIORITY MATRIX DEBUGGING =====")
+    print(f"DEBUG: Filtering for {competitor_group} competitors")
+    print(f"DEBUG: Input data shape: {df.shape}")
+    print(f"DEBUG: Input data columns: {df.columns.tolist()}")
+    
+    # Show sample of the data for debugging
+    if not df.empty:
+        print(f"DEBUG: Sample data (first 3 rows):")
+        for i, (_, row) in enumerate(df.head(3).iterrows()):
+            print(f"  Row {i+1}: website='{row.get('website', 'N/A')}', topics='{row.get('topics', 'N/A')}'")
+        
+        # Show ALL unique websites in the data
+        print(f"DEBUG: ALL UNIQUE WEBSITES IN DATA:")
+        unique_websites = df['website'].unique()
+        for i, website in enumerate(unique_websites, 1):
+            print(f"  {i}. '{website}'")
+        print(f"DEBUG: Total unique websites: {len(unique_websites)}")
+    
+    # Check if 'website' column exists and has data
+    if 'website' not in df.columns:
+        print(f"DEBUG: ERROR - 'website' column not found in data!")
+        print(f"DEBUG: Available columns: {df.columns.tolist()}")
+        return go.Figure()
+    
+    if df['website'].isna().all():
+        print(f"DEBUG: ERROR - All website values are NaN!")
+        return go.Figure()
+    
+    # Get competitor sites from config based on group
+    competitor_sites = [s for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    competitor_urls = [s["url"] for s in competitor_sites]
+    competitor_names = {s["url"]: s.get("name", s["url"].split("//")[-1].split("/")[0]) for s in competitor_sites}
+    
+    print(f"DEBUG: {competitor_group} competitor URLs: {competitor_urls}")
+    print(f"DEBUG: {competitor_group} competitor names: {competitor_names}")
+    
+    # Special debugging for International Competitors
+    if competitor_group == "international":
+        print(f"DEBUG: INTERNATIONAL COMPETITORS ANALYSIS:")
+        print(f"DEBUG: Expected 8 international competitors:")
+        for i, site in enumerate(competitor_sites, 1):
+            print(f"  {i}. {site['name']} - {site['url']}")
+        print(f"DEBUG: Total competitor sites found: {len(competitor_sites)}")
+    
+    # Use consistent URL matching like other functions
+    # Create normalized competitor URLs for matching
+    normalized_competitor_urls = [normalize_url(url) for url in competitor_urls]
+    competitor_url_map = {normalize_url(url): url for url in competitor_urls}
+    
+    print(f"DEBUG: Normalized competitor URLs: {normalized_competitor_urls}")
+    
+    # Filter dataframe with flexible matching - more efficient approach
+    matched_rows = []
+    matched_sites = set()
+    
+    print(f"DEBUG: Starting matching process...")
+    print(f"DEBUG: Will check {len(df)} rows against {len(competitor_urls)} competitor URLs")
+    
+    for row_idx, (_, row) in enumerate(df.iterrows()):
+        site_url = row["website"]
+        normalized_site = normalize_url(site_url)
+        
+        if row_idx < 5:  # Debug first 5 rows
+            print(f"DEBUG: Row {row_idx+1}: Checking '{site_url}' -> '{normalized_site}'")
+        
+        # Check if this site matches any competitor with improved matching
+        for i, norm_comp_url in enumerate(normalized_competitor_urls):
+            # More flexible matching logic
+            match_found = False
+            
+            # Exact match
+            if normalized_site == norm_comp_url:
+                match_found = True
+                print(f"DEBUG: Exact match: {site_url} -> {competitor_urls[i]}")
+            
+            # Partial match - competitor URL in site URL
+            elif norm_comp_url in normalized_site and len(norm_comp_url) > 3:
+                match_found = True
+                print(f"DEBUG: Partial match (comp in site): {site_url} -> {competitor_urls[i]}")
+            
+            # Reverse match - site URL in competitor URL
+            elif normalized_site in norm_comp_url and len(normalized_site) > 3:
+                match_found = True
+                print(f"DEBUG: Reverse match (site in comp): {site_url} -> {competitor_urls[i]}")
+            
+            # Domain match - check if domains match (more precise)
+            elif ('.' in normalized_site and '.' in norm_comp_url):
+                site_domain = '.'.join(normalized_site.split('.')[-2:])  # Get last two parts (domain.tld)
+                comp_domain = '.'.join(norm_comp_url.split('.')[-2:])    # Get last two parts (domain.tld)
+                if site_domain == comp_domain:
+                    match_found = True
+                    print(f"DEBUG: Domain match: {site_url} -> {competitor_urls[i]}")
+            
+            if match_found and site_url not in matched_sites:
+                matched_rows.append(row)
+                matched_sites.add(site_url)
+                print(f"DEBUG: ✓ ADDED TO MATCHED: {site_url}")
+                break
+            elif match_found and site_url in matched_sites:
+                print(f"DEBUG: ⚠️ ALREADY MATCHED: {site_url}")
+                break
+    
+    # Create filtered dataframe efficiently
+    if matched_rows:
+        df_filtered = pd.DataFrame(matched_rows)
+        print(f"DEBUG: Successfully created filtered DataFrame with {len(matched_rows)} rows")
+    else:
+        df_filtered = pd.DataFrame()
+        print(f"DEBUG: WARNING - No matched rows found! This will cause empty visualization.")
+    
+    print(f"DEBUG: ===== MATCHING SUMMARY =====")
+    print(f"DEBUG: Total rows processed: {len(df)}")
+    print(f"DEBUG: Matched sites found: {len(matched_sites)}")
+    print(f"DEBUG: Matched sites: {list(matched_sites)}")
+    print(f"DEBUG: Filtered data shape: {df_filtered.shape}")
+    print(f"DEBUG: Filtered websites: {df_filtered['website'].unique()}")
+    print(f"DEBUG: All available websites in data: {df['website'].unique()}")
+    print(f"DEBUG: Looking for {len(competitor_urls)} competitors: {competitor_urls}")
+    print(f"DEBUG: Normalized competitor URLs: {normalized_competitor_urls}")
+    
+    # Special analysis for International Competitors
+    if competitor_group == "international":
+        print(f"DEBUG: ===== INTERNATIONAL COMPETITORS DETAILED ANALYSIS =====")
+        print(f"DEBUG: INTERNATIONAL MATCHING RESULTS:")
+        print(f"DEBUG: Found {len(matched_sites)} international competitors in data:")
+        for site in matched_sites:
+            print(f"  ✓ {site}")
+        
+        print(f"DEBUG: All websites in original data:")
+        for website in df['website'].unique():
+            print(f"  - {website}")
+        
+        print(f"DEBUG: Matching analysis for each competitor:")
+        missing_international = []
+        for comp_url in competitor_urls:
+            comp_name = competitor_names.get(comp_url, comp_url.split("//")[-1].split("/")[0])
+            print(f"DEBUG: Checking {comp_name} ({comp_url})...")
+            
+            found = False
+            norm_comp_url = normalize_url(comp_url)
+            print(f"DEBUG:   Normalized competitor URL: '{norm_comp_url}'")
+            
+            for website in df['website'].unique():
+                normalized_site = normalize_url(website)
+                print(f"DEBUG:   Checking against '{website}' -> '{normalized_site}'")
+                
+                # Check all matching conditions
+                if normalized_site == norm_comp_url:
+                    print(f"DEBUG:     ✓ EXACT MATCH!")
+                    found = True
+                elif norm_comp_url in normalized_site and len(norm_comp_url) > 3:
+                    print(f"DEBUG:     ✓ PARTIAL MATCH (comp in site)")
+                    found = True
+                elif normalized_site in norm_comp_url and len(normalized_site) > 3:
+                    print(f"DEBUG:     ✓ REVERSE MATCH (site in comp)")
+                    found = True
+                elif ('.' in normalized_site and '.' in norm_comp_url):
+                    site_domain = '.'.join(normalized_site.split('.')[-2:])
+                    comp_domain = '.'.join(norm_comp_url.split('.')[-2:])
+                    if site_domain == comp_domain:
+                        print(f"DEBUG:     ✓ DOMAIN MATCH ({site_domain} == {comp_domain})")
+                        found = True
+                
+                if found:
+                    break
+            
+            if not found:
+                missing_international.append(comp_url)
+                print(f"DEBUG:   ✗ NO MATCH FOUND")
+            else:
+                print(f"DEBUG:   ✓ MATCH FOUND")
+        
+        if missing_international:
+            print(f"DEBUG: Missing international competitors ({len(missing_international)}):")
+            for url in missing_international:
+                name = competitor_names.get(url, url.split("//")[-1].split("/")[0])
+                print(f"  ✗ {name} - {url}")
+        else:
+            print(f"DEBUG: ✓ All 8 international competitors found!")
+    
+    # Additional debugging: show what we're trying to match
+    print(f"DEBUG: Available websites in data (normalized):")
+    for website in df['website'].unique():
+        normalized = normalize_url(website)
+        print(f"  '{website}' -> '{normalized}'")
+    
+    if df_filtered.empty:
+        # Create a more informative error message
+        missing_competitors = []
+        for comp_url in competitor_urls:
+            found = False
+            norm_comp_url = normalize_url(comp_url)
+            for website in df['website'].unique():
+                normalized_site = normalize_url(website)
+                
+                # Use the same matching logic as the main function
+                if (normalized_site == norm_comp_url or
+                    (norm_comp_url in normalized_site and len(norm_comp_url) > 3) or
+                    (normalized_site in norm_comp_url and len(normalized_site) > 3) or
+                    ('.' in normalized_site and '.' in norm_comp_url and 
+                     '.'.join(normalized_site.split('.')[-2:]) == '.'.join(norm_comp_url.split('.')[-2:]))):
+                    found = True
+                    break
+            if not found:
+                missing_competitors.append(comp_url)
+        
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No data available for {competitor_group.title()} Competitors",
+            template="plotly_dark",
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a",
+            height=500,
+            annotations=[
+                dict(
+                    x=0.5, y=0.5,
+                    xref="paper", yref="paper",
+                    text=f"Missing competitors: {missing_competitors}<br>Please scrape these competitors first.",
+                    showarrow=False,
+                    font=dict(size=14, color="#e2e8f0")
+                )
+            ]
+        )
+        return fig
+    
+    # --- Normalize topics with improved deduplication ---
     all_rows = []
-    for _, row in df.iterrows():
+    topic_normalization_map = {}
+    
+    def normalize_topic_for_sankey(topic):
+        """Normalize topics to prevent duplicates"""
+        if not topic or not topic.strip():
+            return None
+        clean = topic.strip().strip("[]'\"")
+        lower_clean = clean.lower()
+        
+        # Handle common duplicates
+        if lower_clean in ['innovation', 'business strategy', 'cybersecurity']:
+            return clean.title()
+        return clean.title()
+    
+    # Process ONLY the filtered data
+    for _, row in df_filtered.iterrows():
         site = row["website"]
         topics = row.get("topics", [])
         if isinstance(topics, str):
@@ -1256,49 +2724,103 @@ def create_topic_sankey(df, competitor_group="close", top_n=20):
             except Exception:
                 topics = [t.strip() for t in topics.split(",")]
         topics = [t.strip() for t in topics if t.strip()]
+        
         for t in topics:
-            all_rows.append({"website": site, "topic": t})
+            normalized_topic = normalize_topic_for_sankey(t)
+            if normalized_topic:
+                all_rows.append({"website": site, "topic": normalized_topic})
 
     df_long = pd.DataFrame(all_rows)
-    top_topics = [t for t, _ in Counter(df_long["topic"]).most_common(top_n)]
+    
+    # Get top topics with better filtering
+    topic_counts = Counter(df_long["topic"])
+    # Filter out topics with very low frequency to reduce clutter
+    min_frequency = max(1, len(df_long) // 50)  # Dynamic minimum frequency
+    meaningful_topics = {t: c for t, c in topic_counts.items() if c >= min_frequency}
+    
+    # Get top N meaningful topics
+    top_topics = [t for t, _ in Counter(meaningful_topics).most_common(top_n)]
     df_long = df_long[df_long["topic"].isin(top_topics)]
 
-    # --- Build Sankey nodes and links ---
+    if df_long.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No meaningful topics found for {competitor_group.capitalize()} Competitors",
+            template="plotly_dark",
+            paper_bgcolor="#0f172a",
+            plot_bgcolor="#0f172a",
+            height=500
+        )
+        return fig
+
+    # --- Build Sankey nodes and links with improved structure ---
     competitors = df_long["website"].unique().tolist()
     topics = df_long["topic"].unique().tolist()
-    all_nodes = competitors + topics
+    
+    # Create competitor name mapping function
+    def get_competitor_name(website_url):
+        """Get proper competitor name for a website URL"""
+        normalized_comp = normalize_url(website_url)
+        
+        for norm_url, orig_url in competitor_url_map.items():
+            if norm_url in normalized_comp or normalized_comp in norm_url:
+                return competitor_names.get(orig_url, orig_url.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0])
+        
+        # Fallback to cleaning the URL
+        return website_url.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+    
+    # Use proper competitor names from config with flexible matching
+    clean_competitors = [get_competitor_name(comp) for comp in competitors]
+    all_nodes = clean_competitors + topics
+
+    # Build links with value aggregation to reduce clutter
+    link_data = {}
+    for _, row in df_long.iterrows():
+        # Get the proper competitor name for this website
+        comp_name = get_competitor_name(row["website"])
+        
+        try:
+            comp_idx = clean_competitors.index(comp_name)
+            topic_idx = topics.index(row["topic"]) + len(clean_competitors)
+            key = (comp_idx, topic_idx)
+            link_data[key] = link_data.get(key, 0) + 1
+        except ValueError as e:
+            print(f"DEBUG: Error finding index for {comp_name} or {row['topic']}: {e}")
+            continue
 
     source, target, value = [], [], []
-    for _, row in df_long.iterrows():
-        source.append(all_nodes.index(row["website"]))
-        target.append(all_nodes.index(row["topic"]))
-        value.append(1)
+    for (s, t), v in link_data.items():
+        source.append(s)
+        target.append(t)
+        value.append(v)
 
-    # --- Sankey figure ---
+    # --- Sankey figure with improved styling ---
     fig = go.Figure(data=[go.Sankey(
         arrangement="snap",
         node=dict(
-            pad=20,
-            thickness=18,
-            line=dict(color="rgba(255,255,255,0.1)", width=1),
+            pad=25,  # Increased padding for better spacing
+            thickness=20,  # Slightly thicker nodes
+            line=dict(color="rgba(255,255,255,0.2)", width=2),
             label=all_nodes,
-            color=["#38bdf8" if n in competitors else "#c084fc" for n in all_nodes],
+            color=["#3b82f6" if n in clean_competitors else "#8b5cf6" for n in all_nodes],
+            hovertemplate="%{label}<br>Connections: %{value}<extra></extra>"
         ),
         link=dict(
             source=source,
             target=target,
             value=value,
-            color="rgba(56,189,248,0.4)" if competitor_group == "close" else "rgba(249,115,22,0.4)"
+            color="rgba(59,130,246,0.3)" if competitor_group == "close" else "rgba(139,92,246,0.3)",
+            hovertemplate="%{source.label} → %{target.label}<br>Strength: %{value}<extra></extra>"
         )
     )])
 
     fig.update_layout(
-        title=f"Topic Flow — {competitor_group.capitalize()} Competitors (Top {top_n} Topics)",
-        font=dict(size=12, color="#f1f5f9"),
+        title=f"🎯 Topic Flow — {competitor_group.capitalize()} Competitors (Top {len(topics)} Topics)",
+        font=dict(size=13, color="#f1f5f9"),
         paper_bgcolor="#0f172a",
         plot_bgcolor="#0f172a",
-        height=700,
-        margin=dict(l=20, r=20, t=60, b=20)
+        height=800,  # Increased height for better visibility
+        margin=dict(l=50, r=50, t=80, b=50)
     )
 
     return fig

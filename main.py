@@ -393,7 +393,7 @@ def render_competitor_controls(sites, group_name):
             df_cache = load_cache()
             if not df_cache.empty:
                 competitor_group = "close" if group_name.lower() == "close" else "international"
-                fig = create_topic_network(df_cache, competitor_group=competitor_group, top_n=20)
+                fig = create_topic_network(df_cache, competitor_group=competitor_group, max_topics=25)
 
                 if fig:
                     st.plotly_chart(fig, use_container_width=True, key=f"network_chart_{group_name.lower()}")
@@ -809,33 +809,27 @@ with cards_col:
     st.markdown('<div style="margin-top: 8rem;"></div>', unsafe_allow_html=True)
     
     # --- Card 1: Scrape All Competitors ---
-    try:
-        container_scrape_all = st.container(border=True, key="card_scrape_all")
-    except TypeError:
-        container_scrape_all = st.container(key="card_scrape_all")
+    container_scrape_all = st.container(border=True)
     with container_scrape_all:
         st.markdown("<h3 style='text-align: center;'>Web Scraping</h3>", unsafe_allow_html=True)
         st.markdown("<p style='font-size: 1.1rem; text-align: center;'>Fetch and update competitor insights from all tracked sites.</p>", unsafe_allow_html=True)
         # Center button using columns
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("Scrape All Competitors", key="scrape_all_v3", width='stretch'):
+            if st.button("Scrape All Competitors", key="scrape_all_v3"):
                 with st.spinner("Scraping all competitor websites..."):
                     scrape_all_sites()
                 st.success("All competitors scraped successfully!")
 
     # --- Card 2: Scrape Ergosign ---
-    try:
-        container_ergosign = st.container(border=True, key="card_ergosign")
-    except TypeError:
-        container_ergosign = st.container(key="card_ergosign")
+    container_ergosign = st.container(border=True)
     with container_ergosign:
         st.markdown("<h3 style='text-align: center;'>Ergosign Website</h3>", unsafe_allow_html=True)
         st.markdown('<p style="text-align: center;"><a href="https://www.ergosign.de/en/" target="_blank" style="color:#bfdbfe; font-size: 1.1rem;">ergosign.de/en</a></p>', unsafe_allow_html=True)
         # Center button using columns
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("Scrape Ergosign", key="scrape_ergosign_v3", width='stretch'):
+            if st.button("Scrape Ergosign", key="scrape_ergosign_v3"):
                 with st.spinner("Scraping Ergosign website..."):
                     scrape_site_with_cache("https://www.ergosign.de/en/")
 
@@ -982,7 +976,6 @@ with main_col:
         # Remove empty strings and get unique topics
         all_topics = [t for t in all_topics if t]
         unique_topics = len(set(all_topics))
-        st.sidebar.metric("Unique Topics", unique_topics)
         
         # Last update info
         st.sidebar.markdown("---")
