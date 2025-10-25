@@ -22,9 +22,11 @@ from config import SITES
 from storage import load_cache
 from urllib.parse import urlparse
 import ast
-
+import networkx as nx
 import streamlit as st
 from storage import load_cache
+from collections import Counter
+import ast
 
 @st.cache_data(
     show_spinner=False,
@@ -864,31 +866,31 @@ class TopicVisualizer:
 
     
 
-    def display_metrics(self):
-        """Display key metrics"""
-        if self.df.empty:
-            return
+    # def display_metrics(self):
+    #     """Display key metrics"""
+    #     if self.df.empty:
+    #         return
         
-        col1, col2, col3, col4 = st.columns(4)
+    #     col1, col2, col3, col4 = st.columns(4)
         
-        with col1:
-            st.metric("Total Websites", len(self.df['website'].unique()))
+    #     with col1:
+    #         st.metric("Total Websites", len(self.df['website'].unique()))
         
-        with col2:
-            st.metric("Total Pages", len(self.df))
+    #     with col2:
+    #         st.metric("Total Pages", len(self.df))
         
-        with col3:
-            all_topics = []
-            for topics_str in self.df['topics'].dropna():
-                if topics_str and topics_str != '[]':
-                    topics = [topic.strip() for topic in str(topics_str).split(',')]
-                    all_topics.extend(topics)
-            st.metric("Unique Topics", len(set(all_topics)))
+    #     with col3:
+    #         all_topics = []
+    #         for topics_str in self.df['topics'].dropna():
+    #             if topics_str and topics_str != '[]':
+    #                 topics = [topic.strip() for topic in str(topics_str).split(',')]
+    #                 all_topics.extend(topics)
+    #         st.metric("Unique Topics", len(set(all_topics)))
         
-        with col4:
-            base_pages = len(self.base_data) if not self.base_data.empty else 0
-            competitor_pages = len(self.competitor_data) if not self.competitor_data.empty else 0
-            st.metric("Base vs Competitor Pages", f"{base_pages} : {competitor_pages}")
+    #     with col4:
+    #         base_pages = len(self.base_data) if not self.base_data.empty else 0
+    #         competitor_pages = len(self.competitor_data) if not self.competitor_data.empty else 0
+    #         st.metric("Base vs Competitor Pages", f"{base_pages} : {competitor_pages}")
     
     # @st.cache_data(show_spinner=False, hash_funcs={list: lambda _: None})
 
@@ -936,7 +938,7 @@ class TopicVisualizer:
         )
 
         # --- Layout: Title + Filters in One Row ---
-        st.markdown("### 🧭 Treemap of Topic Distribution")
+        st.markdown("### Treemap of Topic Distribution")
 
         col1, col2, col3, col4 = st.columns([1, 2, 2, 1])  # balanced center layout
         with col2:
@@ -1000,13 +1002,13 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
 
         """Main function to display topic visualizations with filtering for competitor groups"""
         
-        ## Dynamic header
-        if competitor_type == "close":
-            st.header("📊 Topic Analysis – Close Competitors")
-        elif competitor_type == "international":
-            st.header("📊 Topic Analysis – International Competitors")
-        else:
-            st.header("📊 Topic Analysis & Comparison")
+        # ## Dynamic header
+        # if competitor_type == "close":
+        #     st.header("📊 Topic Analysis – Close Competitors")
+        # elif competitor_type == "international":
+        #     st.header("📊 Topic Analysis – International Competitors")
+        # else:
+        #     st.header("📊 Topic Analysis & Comparison")
 
         visualizer = TopicVisualizer()
 
@@ -1015,8 +1017,8 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
             return True
 
         # Display metrics
-        visualizer.display_metrics()
-        st.markdown("---")
+        # visualizer.display_metrics()
+        # st.markdown("---")
 
         # Create tabs for different analysis views
         tabs = st.tabs([
@@ -1030,7 +1032,7 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
         ])
 
         with tabs[0]:
-            st.subheader("Treemap of Topic Distribution")
+            # st.subheader("Treemap of Topic Distribution")
 
             if not visualizer.competitor_data.empty:
                 # Flatten topic lists safely
@@ -1065,21 +1067,165 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
         st.markdown("---")
         
         # Simple insights section
-        st.subheader("Summary")
+        # st.subheader("Summary")
         
-        if not visualizer.base_data.empty and not visualizer.competitor_data.empty:
-            base_topics = visualizer.extract_topics(visualizer.base_data)
-            competitor_topics = visualizer.extract_topics(visualizer.competitor_data)
+        # if not visualizer.base_data.empty and not visualizer.competitor_data.empty:
+        #     base_topics = visualizer.extract_topics(visualizer.base_data)
+        #     competitor_topics = visualizer.extract_topics(visualizer.competitor_data)
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Your Topics", len(base_topics))
-            with col2:
-                st.metric("Competitor Topics", len(competitor_topics))
-            with col3:
-                common_topics = set(base_topics.keys()) & set(competitor_topics.keys())
-                st.metric("Common Topics", len(common_topics))
+        #     col1, col2, col3 = st.columns(3)
+        #     with col1:
+        #         st.metric("Your Topics", len(base_topics))
+        #     with col2:
+        #         st.metric("Competitor Topics", len(competitor_topics))
+        #     with col3:
+        #         common_topics = set(base_topics.keys()) & set(competitor_topics.keys())
+        #         st.metric("Common Topics", len(common_topics))
             
-            st.markdown("---")
+        #     st.markdown("---")
 
 
+def normalize_url(u):
+    if not isinstance(u, str):
+        return ""
+    return u.lower().replace("https://", "").replace("http://", "").replace("www.", "").strip('/')
+
+
+
+def create_topic_network(df, competitor_group="close", top_n=20):
+    """
+    Build an interactive competitor–topic network graph for either close or international competitors.
+    """
+
+    # --- Filter based on competitor group (same logic as treemap uses) ---
+    selected_sites = [normalize_url(s["url"]) for s in SITES if s.get("type") == f"competitor_{competitor_group}"]
+    df["website_clean"] = df["website"].apply(normalize_url)
+    df = df[df["website_clean"].isin(selected_sites)]
+
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"No data available for {competitor_group.title()} competitors",
+            template="plotly_dark", height=500
+        )
+        return fig
+
+    # --- Extract and clean topics ---
+    all_topics = []
+    for topics in df["topics"].dropna():
+        if isinstance(topics, list):
+            all_topics.extend([t.strip() for t in topics if str(t).strip()])
+        elif isinstance(topics, str):
+            try:
+                parsed = ast.literal_eval(topics)
+                if isinstance(parsed, list):
+                    all_topics.extend([t.strip() for t in parsed if str(t).strip()])
+                else:
+                    all_topics.extend([t.strip() for t in topics.split(',') if str(t).strip()])
+            except Exception:
+                all_topics.extend([t.strip() for t in topics.split(',') if str(t).strip()])
+
+    top_topics = [t for t, _ in Counter(all_topics).most_common(top_n)]
+
+    # --- Create bipartite graph ---
+    G = nx.Graph()
+    competitors = df["website"].unique()
+
+    for comp in competitors:
+        G.add_node(comp, type="competitor")
+
+    for _, row in df.iterrows():
+        site = row["website"]
+        topics = row["topics"]
+        if isinstance(topics, str):
+            try:
+                topics = ast.literal_eval(topics)
+            except Exception:
+                topics = [t.strip() for t in topics.split(',')]
+        for t in topics:
+            if t in top_topics:
+                G.add_node(t, type="topic")
+                G.add_edge(site, t)
+
+    # --- Calculate attributes ---
+    degree = dict(G.degree())
+    for n in G.nodes:
+        G.nodes[n]["size"] = 10 + degree[n] * 2
+
+# --- Improved layout: balanced, consistent, centered ---
+    pos = nx.spring_layout(G, k=1.2, iterations=100, seed=42)
+
+    # --- Highlight the most connected (hub) competitor node ---
+    for node, data in G.nodes(data=True):
+        if data["type"] == "competitor" and degree[node] == max(degree.values()):
+            data["size"] *= 1.4  # Slightly enlarge main hub node
+
+
+    # --- Node colour palette ---
+    COLOR_COMPETITOR = "#38bdf8"   # bright teal-blue
+    COLOR_TOPIC = "#c084fc"        # lavender purple
+    COLOR_EDGE = "rgba(148,163,184,0.35)"  # soft gray edge lines
+
+    # --- Build Plotly figure ---
+    edge_x, edge_y = [], []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    # Edges
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(color=COLOR_EDGE, width=0.8),
+        hoverinfo="none"
+    )
+
+    # Nodes
+    node_x, node_y, colors, sizes, labels, hover_texts = [], [], [], [], [], []
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        sizes.append(data["size"])
+        labels.append(node)
+        if data["type"] == "competitor":
+            colors.append(COLOR_COMPETITOR)
+            hover_texts.append(f"<b>Competitor:</b> {node}<br>Connections: {degree[node]}")
+        else:
+            colors.append(COLOR_TOPIC)
+            hover_texts.append(f"<b>Topic:</b> {node}<br>Linked Competitors: {degree[node]}")
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        text=labels,
+        hovertext=hover_texts,
+        textposition="top center",
+        hoverinfo="text",
+        marker=dict(
+            size=sizes,
+            color=colors,
+            line=dict(width=1.4, color="rgba(255,255,255,0.15)"),
+            opacity=0.95
+        )
+    )
+
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+                # title=f"Topic Relationship Network — {competitor_group.title()} Competitors (Top {top_n} Keywords)",
+        showlegend=False,
+        hovermode="closest",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        margin=dict(l=0, r=0, t=60, b=0),
+        height=700,
+    )
+    # --- Center and balance layout visually ---
+    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, scaleanchor="y", scaleratio=1)
+    fig.update_yaxes(showgrid=False, zeroline=False, visible=False)
+    fig.update_layout(autosize=True, margin=dict(l=20, r=20, t=60, b=20), height=600)
+
+    return fig

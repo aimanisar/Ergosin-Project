@@ -12,7 +12,7 @@ from topic_visualization import show_topic_visualization
 from ui_theme import apply_theme
 from workflow import scrape_all_sites, scrape_site_with_cache
 from storage import load_cache
-
+from topic_visualization import create_topic_network
 
 @st.cache_data(show_spinner=False, hash_funcs={list: lambda _: None})
 def get_cached_data():
@@ -169,7 +169,7 @@ st.markdown(
         border: 3px solid transparent;
         border-radius: 16px;
         padding: 2rem;
-        min-height: 240px;
+        min-height: 180px;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
@@ -293,98 +293,118 @@ def render_competitor_controls(sites, group_name):
     """, unsafe_allow_html=True)
 
     # Create 3-column layout: Treemap | Competitor List | Buttons
-    col_treemap, col_list, col_buttons = st.columns([4, 2, 1], gap="small")
+    col_networkmap, col_list, col_buttons = st.columns([5, 1.5, 1.5], gap="medium")
     
-    with col_treemap:
-        st.markdown("### 📊 Topic Distribution")
+    # with col_treemap:
+    #     st.markdown("### 📊 Topic Distribution")
         
+    #     try:
+    #         # Get cached data
+    #         df_cache = load_cache()
+    #         if not df_cache.empty:
+    #             # Import the treemap function from topic_visualization
+    #             from topic_visualization import TopicVisualizer
+                
+    #             # Create visualizer instance
+    #             visualizer = TopicVisualizer()
+    #             visualizer.df = df_cache
+    #             visualizer.competitor_data = df_cache
+                
+    #             # Add controls
+    #             st.markdown("**Select Competitors:**")
+    #             competitor_options = df_cache['website'].unique().tolist()
+    #             selected_competitors = st.multiselect(
+    #                 "Choose competitors:",
+    #                 competitor_options,
+    #                 default=competitor_options[:3] if len(competitor_options) > 3 else competitor_options,
+    #                 key=f"sidebar_treemap_competitors_{group_name}"
+    #             )
+                
+    #             st.markdown("**Top N Topics:**")
+    #             top_n = st.slider("Number of topics:", 5, 20, 10, key=f"sidebar_treemap_top_n_{group_name}")
+                
+    #             if selected_competitors and len(selected_competitors) > 0:
+    #                 # Filter data for selected competitors
+    #                 filtered_df = df_cache[df_cache['website'].isin(selected_competitors)]
+                    
+    #                 if not filtered_df.empty:
+    #                     # Prepare website topics data properly
+    #                     website_topics = {}
+    #                     for site in selected_competitors:
+    #                         site_data = filtered_df[filtered_df['website'] == site]
+    #                         topics_list = []
+    #                         for topics_entry in site_data['topics'].dropna():
+    #                             if isinstance(topics_entry, list):
+    #                                 topics_list.extend([str(t).strip() for t in topics_entry if t and str(t).strip()])
+    #                             elif isinstance(topics_entry, str) and topics_entry.strip() and topics_entry != '[]':
+    #                                 try:
+    #                                     import ast
+    #                                     parsed = ast.literal_eval(topics_entry)
+    #                                     if isinstance(parsed, list):
+    #                                         topics_list.extend([str(t).strip() for t in parsed if t and str(t).strip()])
+    #                                     else:
+    #                                         topics_list.append(topics_entry.strip())
+    #                                 except:
+    #                                     topics_list.append(topics_entry.strip())
+    #                         website_topics[site] = topics_list
+                        
+    #                     # Create a simple treemap without using the main visualization function
+    #                     import plotly.express as px
+    #                     import pandas as pd
+                        
+    #                     # Prepare data for simple treemap
+    #                     all_topics = []
+    #                     for site, topics in website_topics.items():
+    #                         all_topics.extend(topics)
+                        
+    #                     if all_topics:
+    #                         # Count topic frequencies
+    #                         topic_counts = pd.Series(all_topics).value_counts().head(top_n)
+                            
+    #                         # Create simple treemap
+    #                         fig = px.treemap(
+    #                             values=topic_counts.values,
+    #                             names=topic_counts.index,
+    #                             title=f"Topic Distribution - {group_name}",
+    #                             color_continuous_scale="Blues"
+    #                         )
+    #                         fig.update_layout(
+    #                             height=400,
+    #                             title_font_size=16,
+    #                             font_size=12
+    #                         )
+    #                         st.plotly_chart(fig, width='stretch', height=400)
+    #                     else:
+    #                         st.info("No topics found for selected competitors")
+    #                 else:
+    #                     st.info("No data for selected competitors")
+    #             else:
+    #                 st.info("Please select at least one competitor")
+    #         else:
+    #             st.info("No data available - scrape some competitors first")
+    #     except Exception as e:
+    #         st.error(f"Treemap error: {str(e)}")
+    #         st.info("Please check if data is properly loaded and try again")
+    # Inside main.py (in the section where you display the Topic Relationship Map)
+    with col_networkmap:
+        st.markdown("### 🌐 Topic Relationship Map")
+
         try:
-            # Get cached data
             df_cache = load_cache()
             if not df_cache.empty:
-                # Import the treemap function from topic_visualization
-                from topic_visualization import TopicVisualizer
-                
-                # Create visualizer instance
-                visualizer = TopicVisualizer()
-                visualizer.df = df_cache
-                visualizer.competitor_data = df_cache
-                
-                # Add controls
-                st.markdown("**Select Competitors:**")
-                competitor_options = df_cache['website'].unique().tolist()
-                selected_competitors = st.multiselect(
-                    "Choose competitors:",
-                    competitor_options,
-                    default=competitor_options[:3] if len(competitor_options) > 3 else competitor_options,
-                    key=f"sidebar_treemap_competitors_{group_name}"
-                )
-                
-                st.markdown("**Top N Topics:**")
-                top_n = st.slider("Number of topics:", 5, 20, 10, key=f"sidebar_treemap_top_n_{group_name}")
-                
-                if selected_competitors and len(selected_competitors) > 0:
-                    # Filter data for selected competitors
-                    filtered_df = df_cache[df_cache['website'].isin(selected_competitors)]
-                    
-                    if not filtered_df.empty:
-                        # Prepare website topics data properly
-                        website_topics = {}
-                        for site in selected_competitors:
-                            site_data = filtered_df[filtered_df['website'] == site]
-                            topics_list = []
-                            for topics_entry in site_data['topics'].dropna():
-                                if isinstance(topics_entry, list):
-                                    topics_list.extend([str(t).strip() for t in topics_entry if t and str(t).strip()])
-                                elif isinstance(topics_entry, str) and topics_entry.strip() and topics_entry != '[]':
-                                    try:
-                                        import ast
-                                        parsed = ast.literal_eval(topics_entry)
-                                        if isinstance(parsed, list):
-                                            topics_list.extend([str(t).strip() for t in parsed if t and str(t).strip()])
-                                        else:
-                                            topics_list.append(topics_entry.strip())
-                                    except:
-                                        topics_list.append(topics_entry.strip())
-                            website_topics[site] = topics_list
-                        
-                        # Create a simple treemap without using the main visualization function
-                        import plotly.express as px
-                        import pandas as pd
-                        
-                        # Prepare data for simple treemap
-                        all_topics = []
-                        for site, topics in website_topics.items():
-                            all_topics.extend(topics)
-                        
-                        if all_topics:
-                            # Count topic frequencies
-                            topic_counts = pd.Series(all_topics).value_counts().head(top_n)
-                            
-                            # Create simple treemap
-                            fig = px.treemap(
-                                values=topic_counts.values,
-                                names=topic_counts.index,
-                                title=f"Topic Distribution - {group_name}",
-                                color_continuous_scale="Blues"
-                            )
-                            fig.update_layout(
-                                height=400,
-                                title_font_size=16,
-                                font_size=12
-                            )
-                            st.plotly_chart(fig, width='stretch', height=400)
-                        else:
-                            st.info("No topics found for selected competitors")
-                    else:
-                        st.info("No data for selected competitors")
+                competitor_group = "close" if group_name.lower() == "close" else "international"
+                fig = create_topic_network(df_cache, competitor_group=competitor_group, top_n=20)
+
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True, key=f"network_chart_{group_name.lower()}")
+
                 else:
-                    st.info("Please select at least one competitor")
+                    st.info("No data found for this competitor group.")
             else:
-                st.info("No data available - scrape some competitors first")
+                st.info("No data available — please scrape competitors first.")
         except Exception as e:
-            st.error(f"Treemap error: {str(e)}")
-            st.info("Please check if data is properly loaded and try again")
+            st.error(f"Network map error: {e}")
+
     
     with col_list:
         st.markdown("### Competitors")
@@ -781,7 +801,7 @@ st.markdown("""
 # 🧩 Layout – Main Content (Left) + Two Vertical Cards (Right)
 # --------------------------------------------------------------------
 # Create main layout with left content and right sidebar
-main_col, cards_col = st.columns([7, 3], gap="medium")
+main_col, cards_col = st.columns([8, 2], gap="medium")
 
 # Right column - Two vertical cards
 with cards_col:
