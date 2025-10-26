@@ -327,6 +327,13 @@ class TopicVisualizer:
 
         st.plotly_chart(fig, use_container_width=True, key=f"plot_{competitor_type}_{id(fig)}")
 
+        st.caption("""
+        Comparative bar chart illustrating topic coverage between your website (Ergosign) and its competitors.  
+        The orange bars indicate topics most discussed by competitors, while the teal bars show your site’s focus areas.  
+        This helps identify potential content gaps and opportunities for strategic topic alignment.
+        """)
+
+
         # # --- Table below the chart ---
         # st.markdown("### 🔍 Competitors Mentioning Each Topic")
         # st.dataframe(
@@ -993,8 +1000,12 @@ class TopicVisualizer:
 
         st.plotly_chart(fig, use_container_width=True)
 
-
-
+  # ✅ Caption directly below chart
+        st.caption("""
+        This Treemap visualizes topic distribution across selected competitors.
+        Larger blocks represent topics with higher mentions, providing insight into dominant
+        focus areas and recurring themes within competitor content.
+        """)
 
 
 
@@ -1022,13 +1033,13 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
         
         # Create tabs for different analysis views
         tabs = st.tabs([
-            "📊 Competitive Analysis",
-            "📊 Simple Topic Comparison", 
-            "🎯 Priority Matrix"
+            "Competitive Analysis",
+            "Simple Topic Comparison", 
+            "Topic Flow Map"
         ])
 
         with tabs[0]:
-            st.subheader("📊 Competitive Analysis - Topic Distribution")
+            # st.subheader("📊 Competitive Analysis - Topic Distribution")
             if not visualizer.competitor_data.empty:
                 # Flatten topic lists safely
                 website_topics = {}
@@ -1050,12 +1061,12 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
     
 
         with tabs[1]:
-            st.subheader("📊 Simple Topic Comparison")
+            st.subheader("Simple Topic Comparison")
             visualizer.create_simple_topic_comparison(competitor_type=competitor_type)
 
 
         with tabs[2]:
-            st.subheader("🎯 Priority Matrix - Topic Overlap Analysis")
+            st.subheader("Flow of Ideas")
 
             try:
                 df_cache = get_cached_data()
@@ -1068,7 +1079,7 @@ def show_topic_visualization(df=None, competitor_type=None, mode="light"):
                 else:
                     st.info("No cached data found — please scrape competitors first.")
             except Exception as e:
-                st.error(f"Priority Matrix error: {e}")
+                st.error(f"Topic Flow Map error: {e}")
 
 
 
@@ -1361,7 +1372,7 @@ def create_topic_network_old(df, competitor_group="close", top_n=20):
     # Create the final accurate figure
     fig = go.Figure(data=[edge_trace, node_trace])
     fig.update_layout(
-        title=f"Accurate Topic Relationship Network — {competitor_group.title()} Competitors",
+        # title=f"Accurate Topic Relationship Network — {competitor_group.title()} Competitors",
         showlegend=False,
         hovermode="closest",
         template="plotly_dark",
@@ -2449,7 +2460,7 @@ def create_topic_network(df, competitor_group="close", max_topics=25):
     # Create final figure
     fig = go.Figure(data=[edge_trace, node_trace])
     fig.update_layout(
-        title=f"🎯 Ultra Clean Topic Network — {competitor_group.title()} Competitors ({len(df_filtered['website_clean'].unique())} Competitors, {len(top_topics)} Topics)",
+        # title=f"🎯 Ultra Clean Topic Network — {competitor_group.title()} Competitors ({len(df_filtered['website_clean'].unique())} Competitors, {len(top_topics)} Topics)",
         showlegend=False,
         hovermode="closest",
         template="plotly_dark",
@@ -2697,6 +2708,13 @@ def create_topic_sankey(df, competitor_group="close", top_n=20):
             ]
         )
         return fig
+    
+    st.caption("""
+        Sankey diagram visualizing the flow of ideas between competitors and shared topics.  
+        Each line represents the strength of topic overlap, illustrating which themes are most commonly  
+        addressed across competitors and where differentiation opportunities may exist.
+        """)
+
     
     # --- Normalize topics with improved deduplication ---
     all_rows = []
