@@ -11,6 +11,7 @@ html5lib>=1.1
 pandas>=2.0.0
 requests>=2.31.0
 nltk>=3.9.1
+scikit-learn>=1.3.0
 
 # Milvus vector database integration
 pymilvus>=2.3.0

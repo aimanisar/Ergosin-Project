@@ -1,0 +1,31 @@
+{
+  "load_cache": {
+    "name": "load_cache",
+    "seconds": 3.536129449999862,
+    "peak_kb": 3759
+  },
+  "chunking": {
+    "name": "chunking",
+    "seconds": 0.4919085999999879,
+    "peak_kb": 2690,
+    "extra": {
+      "chunks": 199
+    }
+  },
+  "tfidf_fit_transform": {
+    "name": "tfidf_fit_transform",
+    "seconds": 0.45062705000009373,
+    "peak_kb": 4269,
+    "extra": {
+      "vocab": 5000
+    }
+  },
+  "kmeans_clustering": {
+    "name": "kmeans_clustering",
+    "seconds": 1.0063804500000515,
+    "peak_kb": 2347,
+    "extra": {
+      "clusters": 3
+    }
+  }
+}
