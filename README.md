@@ -29,7 +29,7 @@ Previously, this was done manually with no repeatable or scalable process.
 | Category | Tools |
 |----------|-------|
 | Web Scraping | Python, BeautifulSoup, ChromeDriver |
-| Data Processing | Pandas, NLP, Translation APIs |
+| Data Processing | Pandas, Translation APIs |
 | AI/LLM | LLM-assisted topic & keyword extraction |
 | Visualisation | Word Clouds, Timeline Charts, Topic Charts |
 | App Interface | Streamlit |
