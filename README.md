@@ -1,10 +1,10 @@
-# 🔍 Ergosign Content Discovery & Competitor Analysis
+# Ergosign Content Discovery & Competitor Analysis
 
 > LLM-powered competitor content analysis tool built for Ergosign, a German UX design firm — enabling data-driven editorial strategy through automated scraping, topic extraction, and visual analytics.
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
 This project was developed as part of an industry collaboration between **RMIT University** and **Ergosign GmbH**, a leading UX design firm based in Germany. As **Team Lead** of a 5-person student team, I delivered a working content analytics prototype that helped Ergosign identify competitor content gaps and emerging UX topics to guide their editorial strategy.
 
@@ -12,7 +12,7 @@ The project was delivered using **Agile methodology** with weekly client demonst
 
 ---
 
-## 🎯 Problem Statement
+## Problem Statement
 
 Ergosign needed visibility into what competitors were publishing across blogs and service pages. Key questions included:
 
@@ -24,7 +24,7 @@ Previously, this was done manually with no repeatable or scalable process.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Category | Tools |
 |----------|-------|
@@ -37,7 +37,7 @@ Previously, this was done manually with no repeatable or scalable process.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 - **Automated Web Scraping** — Collected competitor blogs and service pages using BeautifulSoup and ChromeDriver
 - **Data Preprocessing Pipeline** — Deduplication, translation (DE → EN), and structured labelling of content
@@ -50,7 +50,7 @@ Previously, this was done manually with no repeatable or scalable process.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Ergosin-Project/
@@ -65,7 +65,7 @@ Ergosin-Project/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -81,16 +81,18 @@ streamlit run main.py
 
 ---
 
-## 📈 Outcomes & Impact
+## Outcomes & Impact
 
 - Delivered a **working prototype** and comprehensive **runbook** to Ergosign
 - Enabled the client to identify **competitor content gaps** and **emerging UX topics**
 - Provided a **roadmap for future automation** and business-scale adoption
 - Project managed end-to-end with Agile delivery across a **5-month engagement**
 
+Demo video link: https://youtu.be/wdN1_YOIHYc
+
 ---
 
-## 👥 Team & Role
+## Team & Role
 
 | Detail | Info |
 |--------|------|
