@@ -1,6 +1,6 @@
 # 🔍 Ergosign Content Discovery & Competitor Analysis
 
-> NLP-powered competitor content analysis tool built for Ergosign, a German UX design firm — enabling data-driven editorial strategy through automated scraping, topic extraction, and visual analytics.
+> LLM-powered competitor content analysis tool built for Ergosign, a German UX design firm — enabling data-driven editorial strategy through automated scraping, topic extraction, and visual analytics.
 
 ---
 
